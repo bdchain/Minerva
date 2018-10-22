@@ -1,0 +1,10 @@
+{
+  "storage":{
+    ipfs : {
+      type:"ipfs",
+      host: "127.0.0.1",
+      port: 5001,
+      enabled: false
+    }
+  }
+}
