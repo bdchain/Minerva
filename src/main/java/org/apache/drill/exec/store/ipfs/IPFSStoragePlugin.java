@@ -33,7 +33,7 @@ public class IPFSStoragePlugin extends AbstractStoragePlugin {
   @Override
   public IPFSGroupScan getPhysicalScan(String userName, JSONOptions selection) throws IOException {
     IPFSScanSpec spec = selection.getListWith(new ObjectMapper(), new TypeReference<IPFSScanSpec>() {});
-    return new IPFSGroupScan(this, spec);
+    return new IPFSGroupScan(this, spec, null);
   }
 
   public IPFS getIPFSClient() {

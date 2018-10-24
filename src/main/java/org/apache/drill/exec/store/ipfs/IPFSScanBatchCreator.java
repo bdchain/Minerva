@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.ops.ExecutorFragmentContext;
+import org.apache.drill.exec.physical.base.GroupScan;
 import org.apache.drill.exec.physical.impl.BatchCreator;
 import org.apache.drill.exec.physical.impl.ScanBatch;
 import org.apache.drill.exec.record.RecordBatch;
@@ -21,15 +22,16 @@ public class IPFSScanBatchCreator implements BatchCreator<IPFSSubScan> {
     Preconditions.checkArgument(children.isEmpty());
     List<RecordReader> readers = new LinkedList<>();
     List<SchemaPath> columns = null;
+    IPFSStoragePlugin plugin = subScan.getIPFSStoragePlugin();
     logger.debug(String.format("subScanSpecList.size = %d", subScan.getIPFSSubScanSpecList().size()));
 
     for (IPFSSubScan.IPFSSubScanSpec scanSpec : subScan.getIPFSSubScanSpecList()) {
       try {
         //FIXME what are columns and what are they for?
-        /*if ((columns = subScan.getColumns())==null) {
+        if ((columns = subScan.getColumns())==null) {
           columns = GroupScan.ALL_COLUMNS;
-        }*/
-        readers.add(new IPFSRecordReader(subScan.getIPFSStoragePlugin().getIPFSClient(), scanSpec, columns));
+        }
+        readers.add(new IPFSRecordReader(context, plugin, scanSpec, columns));
       } catch (Exception e1) {
         throw new ExecutionSetupException(e1);
       }

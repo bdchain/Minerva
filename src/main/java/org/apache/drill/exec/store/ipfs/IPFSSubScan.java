@@ -9,6 +9,7 @@ import com.google.common.collect.ImmutableSet;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 /*import org.apache.drill.common.expression.SchemaPath;*/
+import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.physical.base.AbstractBase;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
 import org.apache.drill.exec.physical.base.PhysicalVisitor;
@@ -24,22 +25,26 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
   private static int IPFS_SUB_SCAN_VALUE = 19155;
   private final IPFSStoragePlugin ipfsStoragePlugin;
   private final List<IPFSSubScanSpec> ipfsSubScanSpecList;
+  private final List<SchemaPath> columns;
 
 
   @JsonCreator
   public IPFSSubScan(@JacksonInject StoragePluginRegistry registry,
                      @JsonProperty("ipfsStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
-                     @JsonProperty("ipfsSubScanSpecList") LinkedList<IPFSSubScanSpec> ipfsSubScanSpecList
+                     @JsonProperty("ipfsSubScanSpecList") LinkedList<IPFSSubScanSpec> ipfsSubScanSpecList,
+                     @JsonProperty("columns") List<SchemaPath> columns
                      ) throws ExecutionSetupException {
     super((String) null);
     ipfsStoragePlugin = (IPFSStoragePlugin) registry.getPlugin(ipfsStoragePluginConfig);
     this.ipfsSubScanSpecList = ipfsSubScanSpecList;
+    this.columns = columns;
   }
 
-  public IPFSSubScan(IPFSStoragePlugin ipfsStoragePlugin, List<IPFSSubScanSpec> ipfsSubScanSpecList) {
+  public IPFSSubScan(IPFSStoragePlugin ipfsStoragePlugin, List<IPFSSubScanSpec> ipfsSubScanSpecList, List<SchemaPath> columns) {
     super((String) null);
     this.ipfsStoragePlugin = ipfsStoragePlugin;
     this.ipfsSubScanSpecList = ipfsSubScanSpecList;
+    this.columns = columns;
   }
 
   @JsonIgnore
@@ -49,6 +54,10 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
 
   public IPFSStoragePluginConfig getIPFSStoragePluginConfig() {
     return ipfsStoragePlugin.getConfig();
+  }
+
+  public List<SchemaPath> getColumns() {
+    return columns;
   }
 
   public List<IPFSSubScanSpec> getIPFSSubScanSpecList() {
@@ -72,9 +81,13 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
   }
 
   @Override
-  public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children)
-      throws ExecutionSetupException {
-    return new IPFSSubScan(ipfsStoragePlugin, ipfsSubScanSpecList);
+  public boolean isExecutable() {
+    return false;
+  }
+
+  @Override
+  public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) {
+    return new IPFSSubScan(ipfsStoragePlugin, ipfsSubScanSpecList, columns);
   }
 
   public static class IPFSSubScanSpec {
