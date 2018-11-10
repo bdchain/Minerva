@@ -10,7 +10,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import io.ipfs.api.MerkleNode;
 import io.ipfs.multihash.Multihash;
+import io.ipfs.multiaddr.MultiAddress;
+import io.ipfs.api.IPFS;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.physical.EndpointAffinity;
@@ -27,7 +31,12 @@ import org.apache.drill.exec.store.schedule.EndpointByteMapImpl;
 import org.apache.drill.exec.store.schedule.CompleteWork;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Collection;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 @JsonTypeName("ipfs-scan")
 public class IPFSGroupScan extends AbstractGroupScan {
@@ -37,6 +46,9 @@ public class IPFSGroupScan extends AbstractGroupScan {
   private List<SchemaPath> columns;
 
   private static long DEFAULT_NODE_SIZE = 1000l;
+
+  private static int MAX_IPFS_NODES = 1;
+  private static int IPFS_TIMEOUT = 5;
 
   private ListMultimap<Integer, IPFSWork> assignments;
   private List<IPFSWork> ipfsWorkList = Lists.newArrayList();
@@ -54,20 +66,77 @@ public class IPFSGroupScan extends AbstractGroupScan {
     super((String) null);
     this.ipfsStoragePlugin = ipfsStoragePlugin;
     this.ipfsScanSpec = ipfsScanSpec;
+    logger.debug("GroupScan constructor called with columns {}", columns);
     this.columns = columns == null || columns.size() == 0? ALL_COLUMNS : columns;
     init();
+  }
+  /*
+   * Picks out only 10.0.0.0/8 range address
+   */
+  private String pickPeerHost(List<MultiAddress> peerAddrs) {
+    for (MultiAddress addr : peerAddrs) {
+      //if (addr.isTCPIP()) {
+        if(addr.getHost().startsWith("10.")) {
+          return addr.getHost();
+        }
+      //}
+    }
+    return null;
   }
 
   private void init() {
     Multihash topHash = ipfsScanSpec.getTargetHash();
     //FIXME we here assume the topHash is available on foreman, which is _this_ endpoint
     //need revise this assumption
+
+    Collection<DrillbitEndpoint> endpoints = ipfsStoragePlugin.getContext().getBits();
+    Map<String,DrillbitEndpoint> endpointMap = Maps.newHashMap();
+    for (DrillbitEndpoint endpoint : endpoints) {
+      endpointMap.put(endpoint.getAddress(), endpoint);
+    }
+    IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
+    IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
     try {
-      DrillbitEndpoint myself = ipfsStoragePlugin.getContext().getEndpoint();
-      //FIXME split topHash down to several pieces and assign multiple works
-      IPFSWork work = new IPFSWork(topHash);
-      work.getByteMap().add(myself, DEFAULT_NODE_SIZE);
-      ipfsWorkList.add(work);
+      // split topHash into several child leaves
+      MerkleNode topNode = ipfs.object.links(topHash);
+      List<Multihash> leaves = Collections.emptyList();
+      if(topNode.links.size() > 0) {
+        // this is a meta node containing leaf hashes
+        logger.debug("{} is a meta node", topHash);
+        leaves = topNode.links.stream().map(x -> x.hash).collect(Collectors.toList());
+        //FIXME do something useful with leaf size, e.g. hint Drill about operation costs
+      }
+      else {
+        //this is a simple node directly owing data
+        logger.debug("{} is a simple node", topHash);
+        leaves = new ArrayList<>();
+        leaves.add(topHash);
+      }
+      logger.debug("Iterating on {} leaves...", leaves.size());
+      for(Multihash leaf : leaves) {
+        IPFSWork work = new IPFSWork(leaf);
+        List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, MAX_IPFS_NODES, IPFS_TIMEOUT);
+        logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
+        for(Multihash provider : providers) {
+          List<MultiAddress> peerAddrs = null;
+          try {
+            peerAddrs = ipfsHelper.findpeerTimeout(provider, IPFS_TIMEOUT);
+          }
+          catch (Exception e) {
+            continue;
+          }
+          String peerHost = pickPeerHost(peerAddrs);
+          logger.debug("Got peer host {} for leaf {}", peerHost, leaf);
+          DrillbitEndpoint ep = endpointMap.get(peerHost);
+          if(ep != null) {
+            logger.debug("added endpoint {} to work", ep);
+            work.getByteMap().add(ep, DEFAULT_NODE_SIZE);
+          }
+
+        }
+        ipfsWorkList.add(work);
+      }
+
       logger.debug("init1: ipfsWorkList.size() = {}", ipfsWorkList.size());
 
     }catch (Exception e) {

@@ -3,6 +3,7 @@ package org.apache.drill.exec.store.ipfs;
 
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.drill.common.JSONOptions;
+import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.store.AbstractStoragePlugin;
 import org.apache.drill.exec.store.SchemaConfig;
@@ -10,6 +11,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.ipfs.api.IPFS;
 import java.io.IOException;
+import java.util.List;
 
 public class IPFSStoragePlugin extends AbstractStoragePlugin {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSStoragePlugin.class);
@@ -26,14 +28,29 @@ public class IPFSStoragePlugin extends AbstractStoragePlugin {
   }
 
   @Override
+  public boolean supportsRead() {
+    return true;
+  }
+
+  @Override
   public boolean supportsWrite() {
     return false;
   }
 
   @Override
   public IPFSGroupScan getPhysicalScan(String userName, JSONOptions selection) throws IOException {
+    logger.debug("IPFSStoragePlugin before getPhysicalScan");
     IPFSScanSpec spec = selection.getListWith(new ObjectMapper(), new TypeReference<IPFSScanSpec>() {});
+    logger.debug("IPFSStoragePlugin getPhysicalScan with selection {}", selection);
     return new IPFSGroupScan(this, spec, null);
+  }
+
+  @Override
+  public IPFSGroupScan getPhysicalScan(String userName, JSONOptions selection, List<SchemaPath> columns) throws IOException {
+    logger.debug("IPFSStoragePlugin before getPhysicalScan");
+    IPFSScanSpec spec = selection.getListWith(new ObjectMapper(), new TypeReference<IPFSScanSpec>() {});
+    logger.debug("IPFSStoragePlugin getPhysicalScan with selection {}, columns {}", selection, columns);
+    return new IPFSGroupScan(this, spec, columns);
   }
 
   public IPFS getIPFSClient() {
