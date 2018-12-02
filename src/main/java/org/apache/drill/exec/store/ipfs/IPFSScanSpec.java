@@ -3,21 +3,17 @@ package org.apache.drill.exec.store.ipfs;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.ipfs.multihash.Multihash;
 
 public class IPFSScanSpec {
-  private Multihash targetHash;
+  private String targetHash;
 
   @JsonCreator
-  public IPFSScanSpec(@JsonProperty("targetHash") String targetHash)  {
-    this.targetHash = Multihash.fromBase58(targetHash);
-  }
-
-  public IPFSScanSpec (Multihash targetHash) {
+  public IPFSScanSpec (@JsonProperty("targetHash") String targetHash) {
     this.targetHash = targetHash;
   }
 
-  public Multihash getTargetHash() {
+  @JsonProperty
+  public String getTargetHash() {
     return targetHash;
   }
 

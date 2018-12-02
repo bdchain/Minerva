@@ -24,12 +24,12 @@ public class IPFSRecordReader extends AbstractRecordReader {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSRecordReader.class);
   private FragmentContext context;
   private IPFSStoragePlugin plugin;
-  private IPFSSubScan.IPFSSubScanSpec subScanSpec;
+  private String subScanSpec;
   private VectorContainerWriter writer;
   private JsonReader jsonReader;
   private Iterator<JsonNode> jsonNodeIterator;
 
-  public IPFSRecordReader(FragmentContext context, IPFSStoragePlugin plugin, IPFSSubScan.IPFSSubScanSpec scanSpec, List<SchemaPath> columns) {
+  public IPFSRecordReader(FragmentContext context, IPFSStoragePlugin plugin, String scanSpec, List<SchemaPath> columns) {
     this.context = context;
     this.plugin = plugin;
     this.subScanSpec = scanSpec;
@@ -39,7 +39,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
 
   @Override
   public void setup(OperatorContext context, OutputMutator output) throws ExecutionSetupException {
-    logger.debug("IPFSRecordReader setup, query {}", subScanSpec.getTargetHash().toString());
+    logger.debug("IPFSRecordReader setup, query {}", subScanSpec);
     this.writer = new VectorContainerWriter(output);
     JsonReader.Builder builder = new JsonReader.Builder(context.getManagedBuffer());
     this.jsonReader = builder.schemaPathColumns(Lists.newArrayList(getColumns()))
@@ -47,7 +47,9 @@ public class IPFSRecordReader extends AbstractRecordReader {
                              .enableNanInf(true)
                              .skipOuterList(true)
                              .build();
-    Multihash rootHash = subScanSpec.getTargetHash();
+    Multihash rootHash = Multihash.fromBase58(subScanSpec);
+    logger.debug("I am RecordReader {}", plugin.getContext().getEndpoint());
+    logger.debug("rootHash={}", rootHash);
     IPFS client = plugin.getIPFSClient();
     String rootJson;
     byte[] rawDataBytes;
@@ -73,7 +75,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
 
   @Override
   public int next() {
-    logger.debug("IPFSRecordReader next");
+    logger.debug("I am IPFSRecordReader {} calling next", plugin.getContext().getEndpoint());
     if (jsonNodeIterator == null || !jsonNodeIterator.hasNext()) {
       return 0;
     }

@@ -23,7 +23,6 @@ import org.apache.drill.exec.physical.base.PhysicalOperator;
 import org.apache.drill.exec.physical.base.ScanStats;
 import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 import org.apache.drill.exec.store.StoragePluginRegistry;
-import org.apache.drill.exec.store.ipfs.IPFSSubScan.IPFSSubScanSpec;
 import org.apache.drill.exec.store.schedule.AffinityCreator;
 import org.apache.drill.exec.store.schedule.AssignmentCreator;
 import org.apache.drill.exec.store.schedule.EndpointByteMap;
@@ -70,22 +69,9 @@ public class IPFSGroupScan extends AbstractGroupScan {
     this.columns = columns == null || columns.size() == 0? ALL_COLUMNS : columns;
     init();
   }
-  /*
-   * Picks out only 10.0.0.0/8 range address
-   */
-  private String pickPeerHost(List<MultiAddress> peerAddrs) {
-    for (MultiAddress addr : peerAddrs) {
-      //if (addr.isTCPIP()) {
-        if(addr.getHost().startsWith("10.")) {
-          return addr.getHost();
-        }
-      //}
-    }
-    return null;
-  }
 
   private void init() {
-    Multihash topHash = ipfsScanSpec.getTargetHash();
+    Multihash topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
     //FIXME we here assume the topHash is available on foreman, which is _this_ endpoint
     //need revise this assumption
 
@@ -114,7 +100,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
       }
       logger.debug("Iterating on {} leaves...", leaves.size());
       for(Multihash leaf : leaves) {
-        IPFSWork work = new IPFSWork(leaf);
+        IPFSWork work = new IPFSWork(leaf.toBase58());
         List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, MAX_IPFS_NODES, IPFS_TIMEOUT);
         logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
         for(Multihash provider : providers) {
@@ -125,7 +111,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
           catch (Exception e) {
             continue;
           }
-          String peerHost = pickPeerHost(peerAddrs);
+          String peerHost = IPFSHelper.pickPeerHost(peerAddrs);
           logger.debug("Got peer host {} for leaf {}", peerHost, leaf);
           DrillbitEndpoint ep = endpointMap.get(peerHost);
           if(ep != null) {
@@ -182,8 +168,8 @@ public class IPFSGroupScan extends AbstractGroupScan {
   @Override
   public int getMaxParallelizationWidth() {
     //FIXME replace 0 with something more meaningful
-    return 0;
-    /*return ipfsWorkList.size();*/
+    /*return 0;*/
+    return ipfsWorkList.size();
   }
 
   @Override
@@ -201,10 +187,10 @@ public class IPFSGroupScan extends AbstractGroupScan {
     logger.debug("workList == null: " + (workList == null? "true": "false"));
     logger.debug(String.format("workList.size(): %d", workList.size()));
 
-    List<IPFSSubScanSpec> scanSpecList = Lists.newArrayList();
+    List<String> scanSpecList = Lists.newArrayList();
 
     for (IPFSWork work : workList) {
-      scanSpecList.add(new IPFSSubScanSpec(work.getPartialRootHash()));
+      scanSpecList.add(work.getPartialRootHash());
     }
 
     return new IPFSSubScan(ipfsStoragePlugin, scanSpecList, columns);
@@ -241,7 +227,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
   }
 
   @JsonIgnore
-  public Multihash getTargetHash() {
+  public String getTargetHash() {
     return getIPFSScanSpec().getTargetHash();
   }
 
@@ -258,14 +244,14 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private class IPFSWork implements CompleteWork {
     private EndpointByteMapImpl byteMap = new EndpointByteMapImpl();
-    private Multihash partialRoot;
+    private String partialRoot;
 
 
-    public IPFSWork(Multihash root) {
+    public IPFSWork(String root) {
       this.partialRoot = root;
     }
 
-    public Multihash getPartialRootHash() {return partialRoot;}
+    public String getPartialRootHash() {return partialRoot;}
 
     @Override
     public long getTotalBytes() {

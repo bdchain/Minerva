@@ -25,7 +25,7 @@ public class IPFSScanBatchCreator implements BatchCreator<IPFSSubScan> {
     IPFSStoragePlugin plugin = subScan.getIPFSStoragePlugin();
     logger.debug(String.format("subScanSpecList.size = %d", subScan.getIPFSSubScanSpecList().size()));
 
-    for (IPFSSubScan.IPFSSubScanSpec scanSpec : subScan.getIPFSSubScanSpecList()) {
+    for (String scanSpec : subScan.getIPFSSubScanSpecList()) {
       try {
         //FIXME what are columns and what are they for?
         if ((columns = subScan.getColumns())==null) {

@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JacksonInject;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.collect.ImmutableSet;
-import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 /*import org.apache.drill.common.expression.SchemaPath;*/
 import org.apache.drill.common.expression.SchemaPath;
@@ -24,14 +23,14 @@ import java.util.List;
 public class IPFSSubScan extends AbstractBase implements SubScan {
   private static int IPFS_SUB_SCAN_VALUE = 19155;
   private final IPFSStoragePlugin ipfsStoragePlugin;
-  private final List<IPFSSubScanSpec> ipfsSubScanSpecList;
+  private final List<String> ipfsSubScanSpecList;
   private final List<SchemaPath> columns;
 
 
   @JsonCreator
   public IPFSSubScan(@JacksonInject StoragePluginRegistry registry,
-                     @JsonProperty("ipfsStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
-                     @JsonProperty("ipfsSubScanSpecList") LinkedList<IPFSSubScanSpec> ipfsSubScanSpecList,
+                     @JsonProperty("ipfsstoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
+                     @JsonProperty("ipfssubScanSpecList") LinkedList<String> ipfsSubScanSpecList,
                      @JsonProperty("columns") List<SchemaPath> columns
                      ) throws ExecutionSetupException {
     super((String) null);
@@ -40,7 +39,7 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
     this.columns = columns;
   }
 
-  public IPFSSubScan(IPFSStoragePlugin ipfsStoragePlugin, List<IPFSSubScanSpec> ipfsSubScanSpecList, List<SchemaPath> columns) {
+  public IPFSSubScan(IPFSStoragePlugin ipfsStoragePlugin, List<String> ipfsSubScanSpecList, List<SchemaPath> columns) {
     super((String) null);
     this.ipfsStoragePlugin = ipfsStoragePlugin;
     this.ipfsSubScanSpecList = ipfsSubScanSpecList;
@@ -52,6 +51,7 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
     return ipfsStoragePlugin;
   }
 
+  @JsonProperty
   public IPFSStoragePluginConfig getIPFSStoragePluginConfig() {
     return ipfsStoragePlugin.getConfig();
   }
@@ -60,7 +60,8 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
     return columns;
   }
 
-  public List<IPFSSubScanSpec> getIPFSSubScanSpecList() {
+  @JsonProperty
+  public List<String> getIPFSSubScanSpecList() {
     return ipfsSubScanSpecList;
   }
 
@@ -91,18 +92,15 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
   }
 
   public static class IPFSSubScanSpec {
-    private final Multihash targetHash;
+    private final String targetHash;
 
     @JsonCreator
     public IPFSSubScanSpec(@JsonProperty("targetHash") String targetHash) {
-      this.targetHash = Multihash.fromBase58(targetHash);
-    }
-
-    public IPFSSubScanSpec(Multihash targetHash) {
       this.targetHash = targetHash;
     }
 
-    public Multihash getTargetHash() {
+    @JsonProperty
+    public String getTargetHash() {
       return targetHash;
     }
   }

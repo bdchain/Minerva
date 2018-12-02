@@ -5,17 +5,15 @@ import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
 
 import java.io.IOException;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import org.apache.commons.net.util.SubnetUtils;
 
 
 public class IPFSHelper {
@@ -42,50 +40,38 @@ public class IPFSHelper {
     }
   }
 
-  public List<Multihash> findprovsTimeout(Multihash id, int maxPeers, int timeout) {
-    FutureTask<List<String>> task = new FutureTask<>(new Callable<List<String>>() {
-      @Override
-      public List<String> call() throws Exception {
-        return client.dht.findprovsList(id, maxPeers);
-      }
-    });
-    executorService.execute(task);
-
+  public List<Multihash> findprovsTimeout(Multihash id, int maxPeers, int timeout) throws IOException {
     List<String> providers;
-    try {
-      providers = task.get(timeout, TimeUnit.SECONDS);
-
-    } catch (InterruptedException | ExecutionException | TimeoutException e) {
-      task.cancel(true);
-      providers = Collections.emptyList();
-    }
+    providers = client.dht.findprovsListTimeout(id, maxPeers, timeout);
 
     List<Multihash> ret = providers.stream().map(str -> Multihash.fromBase58(str)).collect(Collectors.toList());
     return ret;
   }
 
-  public List<MultiAddress> findpeerTimeout(Multihash peerId, int timeout) {
+  public List<MultiAddress> findpeerTimeout(Multihash peerId, int timeout) throws IOException {
     if(peerId.equals(myID)) {
       return myAddrs;
     }
-    FutureTask<List<String>> task = new FutureTask<>(new Callable<List<String>>() {
-      @Override
-      public List<String> call() throws Exception {
-        return client.dht.findpeerList(peerId);
-      }
-    });
-    executorService.execute(task);
 
-    List<String> addrs;
-    try {
-      addrs = task.get(timeout, TimeUnit.SECONDS);
+    List<String> addrs = client.dht.findpeerListTimeout(peerId, timeout);
 
-    } catch (InterruptedException | ExecutionException | TimeoutException e) {
-      task.cancel(true);
-      addrs = Collections.emptyList();
-    }
-
-    List<MultiAddress> ret = addrs.stream().map(str -> new MultiAddress(str)).collect(Collectors.toList());
+    List<MultiAddress>
+        ret = addrs
+        .stream()
+        .filter(addr -> !addr.equals(""))
+        .map(str -> new MultiAddress(str)).collect(Collectors.toList());
     return ret;
+  }
+
+  public static String pickPeerHost(List<MultiAddress> peerAddrs) {
+    SubnetUtils subnet1 = new SubnetUtils("10.0.0.0/8");
+    SubnetUtils subnet2 = new SubnetUtils("172.16.0.0/12");
+    for (MultiAddress addr : peerAddrs) {
+      String host = addr.getHost();
+      if(subnet1.getInfo().isInRange(host) || subnet2.getInfo().isInRange(host)) {
+        return addr.getHost();
+      }
+    }
+    return null;
   }
 }
