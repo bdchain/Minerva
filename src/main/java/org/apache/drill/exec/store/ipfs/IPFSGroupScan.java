@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -53,6 +54,12 @@ public class IPFSGroupScan extends AbstractGroupScan {
   private List<IPFSWork> ipfsWorkList = Lists.newArrayList();
   private List<EndpointAffinity> affinities;
 
+  private static Map<String, String> staticIPEndpointMap = ImmutableMap.of(
+    "172.17.16.4", "qcloud2",
+    "172.17.16.5", "qcloud3",
+    "172.17.16.12", "qcloud1"
+    );
+
   @JsonCreator
   public IPFSGroupScan(@JsonProperty("ipfsScanSpec") IPFSScanSpec ipfsScanSpec,
                        @JsonProperty("ipfsStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
@@ -86,6 +93,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
       // split topHash into several child leaves
       MerkleNode topNode = ipfs.object.links(topHash);
       List<Multihash> leaves = Collections.emptyList();
+      //FIXME make this recursively expand all meta nodes until all nodes in leaves are simple nodes
       if(topNode.links.size() > 0) {
         // this is a meta node containing leaf hashes
         logger.debug("{} is a meta node", topHash);
@@ -93,7 +101,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
         //FIXME do something useful with leaf size, e.g. hint Drill about operation costs
       }
       else {
-        //this is a simple node directly owing data
+        //this is a simple node directly owning data
         logger.debug("{} is a simple node", topHash);
         leaves = new ArrayList<>();
         leaves.add(topHash);
@@ -113,7 +121,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
           }
           String peerHost = IPFSHelper.pickPeerHost(peerAddrs);
           logger.debug("Got peer host {} for leaf {}", peerHost, leaf);
-          DrillbitEndpoint ep = endpointMap.get(peerHost);
+          DrillbitEndpoint ep = endpointMap.get(staticIPEndpointMap.get(peerHost));
           if(ep != null) {
             logger.debug("added endpoint {} to work", ep);
             work.getByteMap().add(ep, DEFAULT_NODE_SIZE);
