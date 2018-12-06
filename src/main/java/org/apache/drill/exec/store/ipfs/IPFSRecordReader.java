@@ -60,6 +60,11 @@ public class IPFSRecordReader extends AbstractRecordReader {
       throw new ExecutionSetupException(e);
     }
     rootJson = new String(rawDataBytes);
+    if (subScanSpec.equals(IPFSHelper.IPFS_NULL_OBJECT)) {
+      // An empty ipfs object, but an empty string will make Jackson ObjectMapper fail
+      // so treat it specially
+      rootJson = "[]";
+    }
     ObjectMapper mapper = new ObjectMapper();
     try {
       JsonNode rootJsonNode = mapper.readTree(rootJson);

@@ -9,7 +9,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import io.ipfs.api.MerkleNode;
@@ -25,13 +24,13 @@ import org.apache.drill.exec.physical.base.ScanStats;
 import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 import org.apache.drill.exec.store.StoragePluginRegistry;
 import org.apache.drill.exec.store.schedule.AffinityCreator;
-import org.apache.drill.exec.store.schedule.AssignmentCreator;
 import org.apache.drill.exec.store.schedule.EndpointByteMap;
 import org.apache.drill.exec.store.schedule.EndpointByteMapImpl;
 import org.apache.drill.exec.store.schedule.CompleteWork;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Collection;
@@ -50,8 +49,9 @@ public class IPFSGroupScan extends AbstractGroupScan {
   private static int MAX_IPFS_NODES = 1;
   private static int IPFS_TIMEOUT = 5;
 
-  private ListMultimap<Integer, IPFSWork> assignments;
+  private Map<Integer, List<IPFSWork>> assignments;
   private List<IPFSWork> ipfsWorkList = Lists.newArrayList();
+  private Map<String, List<IPFSWork>> endpointWorksMap;
   private List<EndpointAffinity> affinities;
 
   private static Map<String, String> staticIPEndpointMap = ImmutableMap.of(
@@ -79,8 +79,6 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private void init() {
     Multihash topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
-    //FIXME we here assume the topHash is available on foreman, which is _this_ endpoint
-    //need revise this assumption
 
     Collection<DrillbitEndpoint> endpoints = ipfsStoragePlugin.getContext().getBits();
     Map<String,DrillbitEndpoint> endpointMap = Maps.newHashMap();
@@ -89,6 +87,8 @@ public class IPFSGroupScan extends AbstractGroupScan {
     }
     IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
+    endpointWorksMap = new HashMap<>();
+
     try {
       // split topHash into several child leaves
       MerkleNode topNode = ipfs.object.links(topHash);
@@ -123,8 +123,20 @@ public class IPFSGroupScan extends AbstractGroupScan {
           logger.debug("Got peer host {} for leaf {}", peerHost, leaf);
           DrillbitEndpoint ep = endpointMap.get(staticIPEndpointMap.get(peerHost));
           if(ep != null) {
-            logger.debug("added endpoint {} to work", ep);
+            logger.debug("added endpoint {} to work {}", ep, work);
             work.getByteMap().add(ep, DEFAULT_NODE_SIZE);
+            work.setOnEndpoint(ep);
+
+            if(endpointWorksMap.containsKey(ep.getAddress())) {
+              endpointWorksMap.get(ep.getAddress()).add(work);
+            } else {
+              List<IPFSWork> ipfsWorks = Lists.newArrayList();
+              ipfsWorks.add(work);
+              endpointWorksMap.put(ep.getAddress(), ipfsWorks);
+            }
+          } else {
+            //TODO what if no corresponding endpoint is available in the cluster?
+            //doing nothing will simply cause data to be missing in the result set
           }
 
         }
@@ -147,6 +159,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     this.ipfsScanSpec = that.ipfsScanSpec;
     this.assignments = that.assignments;
     this.ipfsWorkList = that.ipfsWorkList;
+    this.endpointWorksMap = that.endpointWorksMap;
     this.columns = that.columns;
   }
 
@@ -175,17 +188,39 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   @Override
   public int getMaxParallelizationWidth() {
-    //FIXME replace 0 with something more meaningful
-    /*return 0;*/
-    return ipfsWorkList.size();
+    DrillbitEndpoint myself = ipfsStoragePlugin.getContext().getEndpoint();
+    int width;
+    if (endpointWorksMap.containsKey(myself.getAddress())) {
+      // the foreman is also going to be a minor fragment worker under a UnionExchange operator
+      width = endpointWorksMap.keySet().size();
+    } else {
+      // the foreman does not hold data, so we have to force parallelization
+      // to make sure there is a UnionExchange operator
+      width = endpointWorksMap.keySet().size() + 1;
+    }
+    logger.debug("getMaxParallelizationWidth: {}", width);
+    return width;
   }
 
   @Override
   public void applyAssignments(List<DrillbitEndpoint> incomingEndpoints) {
     logger.debug("ipfsWorkList.size() = {}", ipfsWorkList.size());
-
-    assignments = AssignmentCreator.getMappings(incomingEndpoints, ipfsWorkList);
-    logger.debug("assignments keys:" + assignments.keys().toString());
+    logger.debug("endpointWorksMap: {}", endpointWorksMap);
+    assignments = new HashMap<>();
+    for (int fragmentId=0; fragmentId < incomingEndpoints.size(); fragmentId++) {
+      DrillbitEndpoint ep = incomingEndpoints.get(fragmentId);
+      logger.debug("processing ep {}", ep.getAddress());
+      if (endpointWorksMap.containsKey(ep.getAddress())) {
+        // if this ep has works, add them to the corresponding fragment
+        assignments.put(fragmentId, endpointWorksMap.get(ep.getAddress()));
+        logger.debug("assigned fragement {} to endpoint {}", fragmentId, ep.getAddress());
+      } else {
+        // add a dummy work to this fragment, e.g. when the foreman does not have data, just
+        // make it read an empty object
+        assignments.put(fragmentId, Lists.newArrayList(new IPFSWork(IPFSHelper.IPFS_NULL_OBJECT)));
+        logger.debug("assigned dummy work to endpoint {}", ep.getAddress());
+      }
+    }
   }
 
   @Override
@@ -207,7 +242,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
   @Override
   public ScanStats getScanStats() {
     //FIXME why 100000 * size?
-    long recordCount = 100000 * ipfsWorkList.size();
+    long recordCount = 100001 * endpointWorksMap.keySet().size();
     return new ScanStats(ScanStats.GroupScanProperty.NO_EXACT_ROW_COUNT, recordCount, 1, recordCount);
   }
 
@@ -253,6 +288,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
   private class IPFSWork implements CompleteWork {
     private EndpointByteMapImpl byteMap = new EndpointByteMapImpl();
     private String partialRoot;
+    private DrillbitEndpoint onEndpoint = null;
 
 
     public IPFSWork(String root) {
@@ -260,6 +296,10 @@ public class IPFSGroupScan extends AbstractGroupScan {
     }
 
     public String getPartialRootHash() {return partialRoot;}
+
+    public void setOnEndpoint(DrillbitEndpoint endpointAddress) {
+      this.onEndpoint = endpointAddress;
+    }
 
     @Override
     public long getTotalBytes() {

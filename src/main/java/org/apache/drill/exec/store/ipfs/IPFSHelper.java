@@ -17,6 +17,9 @@ import org.apache.commons.net.util.SubnetUtils;
 
 
 public class IPFSHelper {
+
+  public static String IPFS_NULL_OBJECT = "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n";
+
   private ExecutorService executorService;
   private IPFS client;
   private Multihash myID;
