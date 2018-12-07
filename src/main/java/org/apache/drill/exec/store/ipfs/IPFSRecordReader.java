@@ -1,6 +1,5 @@
 package org.apache.drill.exec.store.ipfs;
 
-import com.google.common.collect.Lists;
 import io.ipfs.api.IPFS;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
@@ -9,15 +8,12 @@ import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.physical.impl.OutputMutator;
 import org.apache.drill.exec.store.AbstractRecordReader;
-import org.apache.drill.exec.vector.BaseValueVector;
-import org.apache.drill.exec.vector.complex.fn.JsonReader;
-import org.apache.drill.exec.vector.complex.impl.VectorContainerWriter;
-import org.codehaus.jackson.JsonNode;
-import org.codehaus.jackson.map.ObjectMapper;
-import com.google.common.base.Charsets;
+import org.apache.drill.exec.store.dfs.DrillFileSystem;
+import org.apache.drill.exec.store.easy.json.JSONRecordReader;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 
 public class IPFSRecordReader extends AbstractRecordReader {
@@ -25,14 +21,14 @@ public class IPFSRecordReader extends AbstractRecordReader {
   private FragmentContext context;
   private IPFSStoragePlugin plugin;
   private String subScanSpec;
-  private VectorContainerWriter writer;
-  private JsonReader jsonReader;
-  private Iterator<JsonNode> jsonNodeIterator;
+  private JSONRecordReader jsonRecordReader;
+  private List<SchemaPath> columnList;
 
   public IPFSRecordReader(FragmentContext context, IPFSStoragePlugin plugin, String scanSpec, List<SchemaPath> columns) {
     this.context = context;
     this.plugin = plugin;
     this.subScanSpec = scanSpec;
+    this.columnList = columns;
     setColumns(columns);
 
   }
@@ -40,13 +36,6 @@ public class IPFSRecordReader extends AbstractRecordReader {
   @Override
   public void setup(OperatorContext context, OutputMutator output) throws ExecutionSetupException {
     logger.debug("IPFSRecordReader setup, query {}", subScanSpec);
-    this.writer = new VectorContainerWriter(output);
-    JsonReader.Builder builder = new JsonReader.Builder(context.getManagedBuffer());
-    this.jsonReader = builder.schemaPathColumns(Lists.newArrayList(getColumns()))
-                             .allTextMode(true)
-                             .enableNanInf(true)
-                             .skipOuterList(true)
-                             .build();
     Multihash rootHash = Multihash.fromBase58(subScanSpec);
     logger.debug("I am RecordReader {}", plugin.getContext().getEndpoint());
     logger.debug("rootHash={}", rootHash);
@@ -59,20 +48,21 @@ public class IPFSRecordReader extends AbstractRecordReader {
     catch (IOException e) {
       throw new ExecutionSetupException(e);
     }
-    rootJson = new String(rawDataBytes);
     if (subScanSpec.equals(IPFSHelper.IPFS_NULL_OBJECT)) {
       // An empty ipfs object, but an empty string will make Jackson ObjectMapper fail
       // so treat it specially
       rootJson = "[]";
     }
     ObjectMapper mapper = new ObjectMapper();
+    JsonNode rootJsonNode;
     try {
-      JsonNode rootJsonNode = mapper.readTree(rootJson);
-      this.jsonNodeIterator = rootJsonNode.getElements();
+      rootJsonNode = mapper.readTree(rawDataBytes);
     }
     catch (IOException e) {
       throw new ExecutionSetupException(e);
     }
+    jsonRecordReader = new JSONRecordReader(this.context, rootJsonNode, (DrillFileSystem) null, columnList);
+    jsonRecordReader.setup(context, output);
 
 
   }
@@ -81,29 +71,16 @@ public class IPFSRecordReader extends AbstractRecordReader {
   @Override
   public int next() {
     logger.debug("I am IPFSRecordReader {} calling next", plugin.getContext().getEndpoint());
-    if (jsonNodeIterator == null || !jsonNodeIterator.hasNext()) {
-      return 0;
-    }
-    writer.allocate();
-    writer.reset();
-    int docCount = 0;
-    try {
-      while (docCount < BaseValueVector.INITIAL_VALUE_ALLOCATION && jsonNodeIterator.hasNext()) {
-        JsonNode node = jsonNodeIterator.next();
-        jsonReader.setSource(node.toString().getBytes(Charsets.UTF_8));
-        writer.setPosition(docCount);
-        jsonReader.write(writer);
-        docCount ++;
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-    writer.setValueCount(docCount);
-    return docCount;
+    return jsonRecordReader.next();
   }
 
   @Override
   public void close() {
+    try {
+      jsonRecordReader.close();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
     logger.debug("IPFSRecordReader close");
   }
 }
