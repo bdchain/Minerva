@@ -192,11 +192,11 @@ public class IPFSGroupScan extends AbstractGroupScan {
     int width;
     if (endpointWorksMap.containsKey(myself.getAddress())) {
       // the foreman is also going to be a minor fragment worker under a UnionExchange operator
-      width = endpointWorksMap.keySet().size();
+      width = endpointWorksMap.size();
     } else {
       // the foreman does not hold data, so we have to force parallelization
       // to make sure there is a UnionExchange operator
-      width = endpointWorksMap.keySet().size() + 1;
+      width = endpointWorksMap.size() + 1;
     }
     logger.debug("getMaxParallelizationWidth: {}", width);
     return width;
@@ -242,7 +242,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
   @Override
   public ScanStats getScanStats() {
     //FIXME why 100000 * size?
-    long recordCount = 100001 * endpointWorksMap.keySet().size();
+    long recordCount = 100001 * endpointWorksMap.size();
     return new ScanStats(ScanStats.GroupScanProperty.NO_EXACT_ROW_COUNT, recordCount, 1, recordCount);
   }
 
