@@ -29,12 +29,12 @@ import org.apache.drill.exec.store.schedule.EndpointByteMapImpl;
 import org.apache.drill.exec.store.schedule.CompleteWork;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Collection;
-import java.util.ArrayList;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @JsonTypeName("ipfs-scan")
@@ -92,19 +92,26 @@ public class IPFSGroupScan extends AbstractGroupScan {
     try {
       // split topHash into several child leaves
       MerkleNode topNode = ipfs.object.links(topHash);
-      List<Multihash> leaves = Collections.emptyList();
-      //FIXME make this recursively expand all meta nodes until all nodes in leaves are simple nodes
-      if(topNode.links.size() > 0) {
-        // this is a meta node containing leaf hashes
-        logger.debug("{} is a meta node", topHash);
-        leaves = topNode.links.stream().map(x -> x.hash).collect(Collectors.toList());
-        //FIXME do something useful with leaf size, e.g. hint Drill about operation costs
-      }
-      else {
-        //this is a simple node directly owning data
-        logger.debug("{} is a simple node", topHash);
-        leaves = new ArrayList<>();
-        leaves.add(topHash);
+      LinkedList<Multihash> leaves = new LinkedList<>();
+      LinkedList<Multihash> intermediates = new LinkedList<>();
+      intermediates.addAll(topNode.links.stream().map(x -> x.hash).collect(Collectors.toList()));
+
+      logger.debug("start to recursively expand nested IPFS hashes, topHash={}", topHash);
+      //FIXME do something useful with leaf size, e.g. hint Drill about operation costs
+      while (true) {
+        try {
+          Multihash metaOrSimpleHash = intermediates.remove();
+          MerkleNode metaOrSimpleNode = ipfs.object.links(metaOrSimpleHash);
+          if (metaOrSimpleNode.links.size() > 0) {
+            logger.debug("{} is a meta node", metaOrSimpleHash);
+            intermediates.addAll(metaOrSimpleNode.links.stream().map(x -> x.hash).collect(Collectors.toList()));
+          } else {
+            logger.debug("{} is a simple node", metaOrSimpleHash);
+            leaves.add(metaOrSimpleNode.hash);
+          }
+        } catch (NoSuchElementException e) {
+          break;
+        }
       }
       logger.debug("Iterating on {} leaves...", leaves.size());
       for(Multihash leaf : leaves) {
