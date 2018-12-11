@@ -91,10 +91,9 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
     try {
       // split topHash into several child leaves
-      MerkleNode topNode = ipfs.object.links(topHash);
       LinkedList<Multihash> leaves = new LinkedList<>();
       LinkedList<Multihash> intermediates = new LinkedList<>();
-      intermediates.addAll(topNode.links.stream().map(x -> x.hash).collect(Collectors.toList()));
+      intermediates.add(topHash);
 
       logger.debug("start to recursively expand nested IPFS hashes, topHash={}", topHash);
       //FIXME do something useful with leaf size, e.g. hint Drill about operation costs
