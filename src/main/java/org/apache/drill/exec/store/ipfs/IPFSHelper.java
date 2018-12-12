@@ -1,6 +1,7 @@
 package org.apache.drill.exec.store.ipfs;
 
 import io.ipfs.api.IPFS;
+import io.ipfs.api.MerkleNode;
 import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
 
@@ -9,11 +10,14 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import org.apache.commons.net.util.SubnetUtils;
+import org.bouncycastle.util.Strings;
+
 
 
 public class IPFSHelper {
@@ -76,5 +80,30 @@ public class IPFSHelper {
       }
     }
     return null;
+  }
+
+  public Optional<String> getPeerDrillHostname(Multihash peerId) {
+    try {
+      Optional<String> optionalPath = client.name.resolve(peerId, 30);
+      if (!optionalPath.isPresent()) {
+        return Optional.empty();
+      }
+      String path = optionalPath.get().substring(6);
+
+      List<MerkleNode> links = client.object.get(Multihash.fromBase58(path)).links;
+
+      return links.stream()
+          .filter(l -> l.name.equals(Optional.of("drill-hostname")))
+          .findFirst()
+          .map(l -> {
+            try {
+              return Strings.fromByteArray(client.object.data(l.hash));
+            } catch (IOException e) {
+              return null;
+            }
+          });
+    } catch (IOException e) {
+      return Optional.empty();
+    }
   }
 }

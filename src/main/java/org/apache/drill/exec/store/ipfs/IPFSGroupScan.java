@@ -14,7 +14,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import io.ipfs.api.MerkleNode;
 import io.ipfs.multihash.Multihash;
-import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.api.IPFS;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
@@ -37,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Collection;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @JsonTypeName("ipfs-scan")
@@ -87,6 +87,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     for (DrillbitEndpoint endpoint : endpoints) {
       endpointMap.put(endpoint.getAddress(), endpoint);
     }
+    logger.debug("endpointMap: {}", endpointMap);
     IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
     endpointWorksMap = new HashMap<>();
@@ -120,16 +121,13 @@ public class IPFSGroupScan extends AbstractGroupScan {
         List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, MAX_IPFS_NODES, IPFS_TIMEOUT);
         logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
         for(Multihash provider : providers) {
-          List<MultiAddress> peerAddrs = null;
-          try {
-            peerAddrs = ipfsHelper.findpeerTimeout(provider, IPFS_TIMEOUT);
-          }
-          catch (Exception e) {
+          Optional<String> peerHost = (new IPFSHelper(ipfs)).getPeerDrillHostname(provider);
+          if (!peerHost.isPresent()) {
             continue;
           }
-          String peerHost = IPFSHelper.pickPeerHost(peerAddrs);
-          logger.debug("Got peer host {} for leaf {}", peerHost, leaf);
-          DrillbitEndpoint ep = endpointMap.get(staticIPEndpointMap.get(peerHost));
+          String peerHostname = peerHost.get();
+          logger.debug("Got peer host {} for leaf {}", peerHostname, leaf);
+          DrillbitEndpoint ep = endpointMap.get(peerHostname);
           if(ep != null) {
             logger.debug("added endpoint {} to work {}", ep, work);
             work.getByteMap().add(ep, DEFAULT_NODE_SIZE);
