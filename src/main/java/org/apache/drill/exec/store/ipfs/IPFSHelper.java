@@ -7,6 +7,8 @@ import io.ipfs.multihash.Multihash;
 
 import java.io.IOException;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +17,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import org.apache.commons.net.util.SubnetUtils;
 import org.bouncycastle.util.Strings;
 
 
@@ -70,16 +71,27 @@ public class IPFSHelper {
     return ret;
   }
 
-  public static String pickPeerHost(List<MultiAddress> peerAddrs) {
-    SubnetUtils subnet1 = new SubnetUtils("10.0.0.0/8");
-    SubnetUtils subnet2 = new SubnetUtils("172.16.0.0/12");
+  public static Optional<String> pickPeerHost(List<MultiAddress> peerAddrs) {
+    String localAddr = null;
     for (MultiAddress addr : peerAddrs) {
       String host = addr.getHost();
-      if(subnet1.getInfo().isInRange(host) || subnet2.getInfo().isInRange(host)) {
-        return addr.getHost();
+      try {
+        InetAddress inetAddress = InetAddress.getByName(host);
+        if (inetAddress.isLoopbackAddress()) {
+          continue;
+        }
+        if (inetAddress.isSiteLocalAddress() || inetAddress.isLinkLocalAddress()) {
+          //FIXME we don't know which local address can be reached; maybe check with InetAddress.isReachable?
+          localAddr = host;
+        } else {
+          return Optional.of(host);
+        }
+      } catch (UnknownHostException e) {
+        continue;
       }
     }
-    return null;
+
+    return Optional.ofNullable(localAddr);
   }
 
   public Optional<String> getPeerDrillHostname(Multihash peerId) {

@@ -8,10 +8,10 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import io.ipfs.api.MerkleNode;
+import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
 import io.ipfs.api.IPFS;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
@@ -111,7 +111,8 @@ public class IPFSGroupScan extends AbstractGroupScan {
         List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, MAX_IPFS_NODES, IPFS_TIMEOUT);
         logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
         for(Multihash provider : providers) {
-          Optional<String> peerHost = (new IPFSHelper(ipfs)).getPeerDrillHostname(provider);
+          List<MultiAddress> addrs = ipfsHelper.findpeerTimeout(provider, IPFS_TIMEOUT);
+          Optional<String> peerHost = IPFSHelper.pickPeerHost(addrs);
           if (!peerHost.isPresent()) {
             continue;
           }
@@ -138,7 +139,8 @@ public class IPFSGroupScan extends AbstractGroupScan {
                 .setVersion(DrillVersionInfo.getVersion())
                 .setState(DrillbitEndpoint.State.ONLINE)
                 .build();
-            coordinator.register(ep);
+            //TODO how to safely remove endpoints that are no longer needed once the query is completed?
+            ClusterCoordinator.RegistrationHandle handle = coordinator.register(ep);
           }
 
           logger.debug("added endpoint {} to work {}", ep.getAddress(), work);
