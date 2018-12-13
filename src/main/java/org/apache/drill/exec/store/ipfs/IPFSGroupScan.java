@@ -11,12 +11,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import io.ipfs.api.MerkleNode;
 import io.ipfs.multihash.Multihash;
 import io.ipfs.api.IPFS;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
+import org.apache.drill.common.util.DrillVersionInfo;
+import org.apache.drill.exec.coord.ClusterCoordinator;
 import org.apache.drill.exec.physical.EndpointAffinity;
 import org.apache.drill.exec.physical.base.AbstractGroupScan;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
@@ -34,7 +35,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Collection;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -56,11 +56,6 @@ public class IPFSGroupScan extends AbstractGroupScan {
   private Map<String, List<IPFSWork>> endpointWorksMap;
   private List<EndpointAffinity> affinities;
 
-  private static Map<String, String> staticIPEndpointMap = ImmutableMap.of(
-    "172.17.16.4", "qcloud2",
-    "172.17.16.5", "qcloud3",
-    "172.17.16.12", "qcloud1"
-    );
 
   @JsonCreator
   public IPFSGroupScan(@JsonProperty("ipfsScanSpec") IPFSScanSpec ipfsScanSpec,
@@ -82,12 +77,6 @@ public class IPFSGroupScan extends AbstractGroupScan {
   private void init() {
     Multihash topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
 
-    Collection<DrillbitEndpoint> endpoints = ipfsStoragePlugin.getContext().getBits();
-    Map<String,DrillbitEndpoint> endpointMap = Maps.newHashMap();
-    for (DrillbitEndpoint endpoint : endpoints) {
-      endpointMap.put(endpoint.getAddress(), endpoint);
-    }
-    logger.debug("endpointMap: {}", endpointMap);
     IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
     endpointWorksMap = new HashMap<>();
@@ -116,6 +105,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
         }
       }
       logger.debug("Iterating on {} leaves...", leaves.size());
+      ClusterCoordinator coordinator = ipfsStoragePlugin.getContext().getClusterCoordinator();
       for(Multihash leaf : leaves) {
         IPFSWork work = new IPFSWork(leaf.toBase58());
         List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, MAX_IPFS_NODES, IPFS_TIMEOUT);
@@ -127,22 +117,40 @@ public class IPFSGroupScan extends AbstractGroupScan {
           }
           String peerHostname = peerHost.get();
           logger.debug("Got peer host {} for leaf {}", peerHostname, leaf);
-          DrillbitEndpoint ep = endpointMap.get(peerHostname);
-          if(ep != null) {
-            logger.debug("added endpoint {} to work {}", ep, work);
-            work.getByteMap().add(ep, DEFAULT_NODE_SIZE);
-            work.setOnEndpoint(ep);
 
-            if(endpointWorksMap.containsKey(ep.getAddress())) {
-              endpointWorksMap.get(ep.getAddress()).add(work);
-            } else {
-              List<IPFSWork> ipfsWorks = Lists.newArrayList();
-              ipfsWorks.add(work);
-              endpointWorksMap.put(ep.getAddress(), ipfsWorks);
-            }
+          Optional<DrillbitEndpoint> oep = coordinator.getAvailableEndpoints()
+              .stream()
+              .filter(a -> a.getAddress().equals(peerHostname))
+              .findAny();
+          DrillbitEndpoint ep;
+          if (oep.isPresent()) {
+            ep = oep.get();
+            logger.debug("Using existing endpoint {}", ep.getAddress());
           } else {
-            //TODO what if no corresponding endpoint is available in the cluster?
-            //doing nothing will simply cause data to be missing in the result set
+            logger.debug("created new endpoint on the fly {}", peerHostname);
+            //TODO read ports & version info from IPFS instead of hard-coded
+            ep = DrillbitEndpoint.newBuilder()
+                .setAddress(peerHostname)
+                .setUserPort(31010)
+                .setControlPort(31011)
+                .setDataPort(31012)
+                .setHttpPort(8047)
+                .setVersion(DrillVersionInfo.getVersion())
+                .setState(DrillbitEndpoint.State.ONLINE)
+                .build();
+            coordinator.register(ep);
+          }
+
+          logger.debug("added endpoint {} to work {}", ep.getAddress(), work);
+          work.getByteMap().add(ep, DEFAULT_NODE_SIZE);
+          work.setOnEndpoint(ep);
+
+          if(endpointWorksMap.containsKey(ep.getAddress())) {
+            endpointWorksMap.get(ep.getAddress()).add(work);
+          } else {
+            List<IPFSWork> ipfsWorks = Lists.newArrayList();
+            ipfsWorks.add(work);
+            endpointWorksMap.put(ep.getAddress(), ipfsWorks);
           }
 
         }
@@ -214,7 +222,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     logger.debug("endpointWorksMap: {}", endpointWorksMap);
     assignments = AssignmentCreator.getMappings(incomingEndpoints, ipfsWorkList);
     for (int i = 0; i < incomingEndpoints.size(); i++) {
-      logger.debug("Fragment {} is assigned with works: {}", i, assignments.get(i));
+      logger.debug("Fragment {} on endpoint {} is assigned with works: {}", i, incomingEndpoints.get(i).getAddress(), assignments.get(i));
     }
   }
 
