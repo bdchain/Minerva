@@ -111,6 +111,9 @@ public class IPFSGroupScan extends AbstractGroupScan {
         List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, MAX_IPFS_NODES, IPFS_TIMEOUT);
         logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
         for(Multihash provider : providers) {
+          if (!ipfsHelper.isDrillReady(provider)) {
+            continue;
+          }
           List<MultiAddress> addrs = ipfsHelper.findpeerTimeout(provider, IPFS_TIMEOUT);
           Optional<String> peerHost = IPFSHelper.pickPeerHost(addrs);
           if (!peerHost.isPresent()) {

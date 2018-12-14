@@ -95,21 +95,29 @@ public class IPFSHelper {
   }
 
   public Optional<String> getPeerDrillHostname(Multihash peerId) {
+    return getPeerData(peerId, "drill-hostname").map(Strings::fromByteArray);
+  }
+
+  public boolean isDrillReady(Multihash peerId) {
+    return getPeerData(peerId, "drill-ready").isPresent();
+  }
+
+  private Optional<byte[]> getPeerData(Multihash peerId, String key) {
     try {
       Optional<String> optionalPath = client.name.resolve(peerId, 30);
       if (!optionalPath.isPresent()) {
         return Optional.empty();
       }
-      String path = optionalPath.get().substring(6);
+      String path = optionalPath.get().substring(6); // path starts with /ipfs/Qm...
 
       List<MerkleNode> links = client.object.get(Multihash.fromBase58(path)).links;
 
       return links.stream()
-          .filter(l -> l.name.equals(Optional.of("drill-hostname")))
+          .filter(l -> l.name.equals(Optional.of(key)))
           .findFirst()
           .map(l -> {
             try {
-              return Strings.fromByteArray(client.object.data(l.hash));
+              return client.object.data(l.hash);
             } catch (IOException e) {
               return null;
             }
