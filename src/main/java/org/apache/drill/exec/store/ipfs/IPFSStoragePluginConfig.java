@@ -14,10 +14,22 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
     private final String host;
     private final int port;
 
+    @JsonProperty("max-nodes-per-leaf")
+    private final int maxNodesPerLeaf;
+
+    @JsonProperty("ipfs-timeout")
+    private final int ipfsTimeout;
+
     @JsonCreator
-    public IPFSStoragePluginConfig(@JsonProperty("host") String host, @JsonProperty("port") int port) {
+    public IPFSStoragePluginConfig(
+        @JsonProperty("host") String host,
+        @JsonProperty("port") int port,
+        @JsonProperty("max-nodes-per-leaf") int maxNodesPerLeaf,
+        @JsonProperty("ipfs-timeout") int ipfsTimeout) {
         this.host = host;
         this.port = port;
+        this.maxNodesPerLeaf = maxNodesPerLeaf;
+        this.ipfsTimeout = ipfsTimeout;
     }
 
     public String getHost() {
@@ -28,9 +40,17 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
         return port;
     }
 
+    public int getMaxNodesPerLeaf() {
+        return maxNodesPerLeaf;
+    }
+
+    public int getIpfsTimeout() {
+        return ipfsTimeout;
+    }
+
     @Override
     public int hashCode() {
-        String host_port = String.format("%s:%d", host, port);
+        String host_port = String.format("%s:%d[%d,%d]", host, port, maxNodesPerLeaf, ipfsTimeout);
         final int prime = 31;
         int result = 1;
         result = prime * result + ((host_port == null) ? 0 : host_port.hashCode());
@@ -53,7 +73,10 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
             if (other.host != null) {
                 return false;
             }
-        } else if (!host.equals(other.host) || port != other.port) {
+        } else if (!host.equals(other.host)
+            || port != other.port
+            || maxNodesPerLeaf != other.maxNodesPerLeaf
+            || ipfsTimeout != other.ipfsTimeout) {
             return false;
         }
         return true;

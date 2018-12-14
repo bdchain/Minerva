@@ -4,6 +4,8 @@
       type:"ipfs",
       host: "127.0.0.1",
       port: 5001,
+      max-nodes-per-leaf: 3,
+      ipfs-timeout: 5,
       enabled: false
     }
   }

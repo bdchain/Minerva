@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
@@ -48,13 +47,16 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private static long DEFAULT_NODE_SIZE = 1000l;
 
-  private static int MAX_IPFS_NODES = 3;
-  private static int IPFS_TIMEOUT = 5;
+  private static int DEFAULT_MAX_IPFS_NODES = 1;
+  private static int DEFAULT_IPFS_TIMEOUT = 2;
 
   private ListMultimap<Integer, IPFSWork> assignments;
   private List<IPFSWork> ipfsWorkList = Lists.newArrayList();
   private Map<String, List<IPFSWork>> endpointWorksMap;
   private List<EndpointAffinity> affinities;
+
+  private int maxNodesPerLeaf = DEFAULT_MAX_IPFS_NODES;
+  private int ipfsTimeout = DEFAULT_IPFS_TIMEOUT;
 
 
   @JsonCreator
@@ -69,6 +71,8 @@ public class IPFSGroupScan extends AbstractGroupScan {
     super((String) null);
     this.ipfsStoragePlugin = ipfsStoragePlugin;
     this.ipfsScanSpec = ipfsScanSpec;
+    this.maxNodesPerLeaf = ipfsStoragePlugin.getConfig().getMaxNodesPerLeaf();
+    this.ipfsTimeout = ipfsStoragePlugin.getConfig().getIpfsTimeout();
     logger.debug("GroupScan constructor called with columns {}", columns);
     this.columns = columns == null || columns.size() == 0? ALL_COLUMNS : columns;
     init();
@@ -108,13 +112,13 @@ public class IPFSGroupScan extends AbstractGroupScan {
       ClusterCoordinator coordinator = ipfsStoragePlugin.getContext().getClusterCoordinator();
       for(Multihash leaf : leaves) {
         IPFSWork work = new IPFSWork(leaf.toBase58());
-        List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, MAX_IPFS_NODES, IPFS_TIMEOUT);
+        List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, maxNodesPerLeaf, ipfsTimeout);
         logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
         for(Multihash provider : providers) {
           if (!ipfsHelper.isDrillReady(provider)) {
             continue;
           }
-          List<MultiAddress> addrs = ipfsHelper.findpeerTimeout(provider, IPFS_TIMEOUT);
+          List<MultiAddress> addrs = ipfsHelper.findpeerTimeout(provider, ipfsTimeout);
           Optional<String> peerHost = IPFSHelper.pickPeerHost(addrs);
           if (!peerHost.isPresent()) {
             continue;
