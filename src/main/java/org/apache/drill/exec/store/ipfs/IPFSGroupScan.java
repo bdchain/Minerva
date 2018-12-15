@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 @JsonTypeName("ipfs-scan")
@@ -115,6 +116,10 @@ public class IPFSGroupScan extends AbstractGroupScan {
         IPFSWork work = new IPFSWork(leaf.toBase58());
         List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, maxNodesPerLeaf, ipfsTimeout);
         logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
+        Random random = new Random();
+        Multihash chosen = providers.get(random.nextInt(providers.size()));
+        providers.clear();
+        providers.add(chosen);
         for(Multihash provider : providers) {
           if (!ipfsHelper.isDrillReady(provider)) {
             continue;
