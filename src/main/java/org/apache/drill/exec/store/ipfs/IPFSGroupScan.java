@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import io.ipfs.api.MerkleNode;
@@ -219,7 +220,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     } else {
       // the foreman does not hold data, so we have to force parallelization
       // to make sure there is a UnionExchange operator
-      width = ipfsWorkList.size();
+      width = ipfsWorkList.size() + 1;
     }
     logger.debug("getMaxParallelizationWidth: {}", width);
     return width;
@@ -229,7 +230,28 @@ public class IPFSGroupScan extends AbstractGroupScan {
   public void applyAssignments(List<DrillbitEndpoint> incomingEndpoints) {
     logger.debug("ipfsWorkList.size() = {}", ipfsWorkList.size());
     logger.debug("endpointWorksMap: {}", endpointWorksMap);
-    assignments = AssignmentCreator.getMappings(incomingEndpoints, ipfsWorkList);
+    if (endpointWorksMap.size()>1) { //偶尔还会出错？
+      //incomingEndpoints是已经排好顺序的endpoints,和fragment 顺序对应
+      logger.debug("Use manual assignment");
+      assignments = ArrayListMultimap.create();
+      for (int fragmentId = 0; fragmentId < incomingEndpoints.size(); fragmentId++) {
+        String address = incomingEndpoints.get(fragmentId).getAddress();
+        if (endpointWorksMap.containsKey(address)) { //如果对应的节点有工作
+          for (IPFSWork work : endpointWorksMap.get(address)) {
+            assignments.put(fragmentId, work);
+          }
+        } else //如果对应的节点没有工作安排，分配一个空work
+        {
+
+        }
+      }
+    }
+    else //如果出问题，按照系统默认分配模式？
+    {
+     logger.debug("Use AssignmentCreator");
+      assignments = AssignmentCreator.getMappings(incomingEndpoints, ipfsWorkList);
+    }
+
     for (int i = 0; i < incomingEndpoints.size(); i++) {
       logger.debug("Fragment {} on endpoint {} is assigned with works: {}", i, incomingEndpoints.get(i).getAddress(), assignments.get(i));
     }
@@ -254,7 +276,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
   @Override
   public ScanStats getScanStats() {
     //FIXME why 100000 * size?
-    long recordCount = 100001 * endpointWorksMap.size();
+    long recordCount = 100000 * endpointWorksMap.size();
     return new ScanStats(ScanStats.GroupScanProperty.NO_EXACT_ROW_COUNT, recordCount, 1, recordCount);
   }
 

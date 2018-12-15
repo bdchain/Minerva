@@ -11,7 +11,7 @@
 
     <artifactId>drill-ipfs-storage</artifactId>
     <name>contrib/ipfs-storage-plugin</name>
-
+    <version>0.1.0</version>
 
     <repositories>
         <repository>
@@ -24,7 +24,7 @@
         <dependency>
             <groupId>org.apache.drill.exec</groupId>
             <artifactId>drill-java-exec</artifactId>
-            <version>${project.version}</version>
+            <version>${parent.version}</version>
         </dependency>
 
         <!-- Test dependencies -->
@@ -32,7 +32,7 @@
             <groupId>org.apache.drill.exec</groupId>
             <artifactId>drill-java-exec</artifactId>
             <classifier>tests</classifier>
-            <version>${project.version}</version>
+            <version>${parent.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -40,7 +40,7 @@
             <groupId>org.apache.drill</groupId>
             <artifactId>drill-common</artifactId>
             <classifier>tests</classifier>
-            <version>${project.version}</version>
+            <version>${parent.version}</version>
             <scope>test</scope>
         </dependency>
 
