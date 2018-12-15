@@ -8,7 +8,7 @@ java-ipfs-api，否则在编译过程中会出现找不到符号的错误。
 
 ### 独立编译
 
-在模块的根目录下运行： `mvn -T 2C clean install -DskipTests -DcheckStyle.skip=true`
+在模块的根目录下运行： `mvn -T 2C clean install -DskipTests -Dcheckstyle.skip=true`
 
 ### 在Drill源码树中编译
 
