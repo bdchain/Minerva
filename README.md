@@ -93,7 +93,7 @@ ipfs name publish $(\
 )
 ```
 
-然后到Drill的webui (![](http://localhost:8047))的Storage 标签页下注册IPFS storage plugin
+然后到Drill的webui (<http://localhost:8047>)的Storage 标签页下注册IPFS storage plugin
 
 页面最下方有 New Storage Pulugin 编辑框，Name 填 `ipfs`，点击Create;
 然后输入ipfs storage plugin的配置，默认配置在`storage-ipfs/src/resources/bootstrap-storage-plugins.json`
