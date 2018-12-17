@@ -88,7 +88,13 @@ public class IPFSRecordReader extends AbstractRecordReader {
       } else {
         rawDataBytes = client.object.data(rootHash);
       }
-      this.stream =  new ByteArrayInputStream(rawDataBytes);
+      String rootJson = new String(rawDataBytes);
+      int  start = rootJson.indexOf("{");
+      int end = rootJson.lastIndexOf("}");
+      rootJson = rootJson.substring(start,end+1);
+
+
+      this.stream =  new ByteArrayInputStream(rootJson.getBytes());
 
       this.writer = new VectorContainerWriter(output, unionEnabled);
       if (isSkipQuery()) {

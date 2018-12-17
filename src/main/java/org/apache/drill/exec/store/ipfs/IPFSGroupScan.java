@@ -116,14 +116,20 @@ public class IPFSGroupScan extends AbstractGroupScan {
         IPFSWork work = new IPFSWork(leaf.toBase58());
         List<Multihash> providers = ipfsHelper.findprovsTimeout(leaf, maxNodesPerLeaf, ipfsTimeout);
         logger.debug("Got {} providers for {} from IPFS", providers.size(), leaf);
-        Random random = new Random();
-        Multihash chosen = providers.get(random.nextInt(providers.size()));
-        providers.clear();
-        providers.add(chosen);
+        providers = providers.stream()
+            .filter(ipfsHelper::isDrillReady)
+            .collect(Collectors.toList());
+        if (providers.size() < 1) {
+          //TODO better retry than give up here
+          logger.warn("No drill-ready provider found for leaf {}, adding foreman as the provider", leaf);
+          providers.add(ipfsHelper.getMyID());
+        } else {
+          Random random = new Random();
+          Multihash chosen = providers.get(random.nextInt(providers.size()));
+          providers.clear();
+          providers.add(chosen);
+        }
         for(Multihash provider : providers) {
-          if (!ipfsHelper.isDrillReady(provider)) {
-            continue;
-          }
           List<MultiAddress> addrs = ipfsHelper.findpeerTimeout(provider, ipfsTimeout);
           Optional<String> peerHost = IPFSHelper.pickPeerHost(addrs);
           if (!peerHost.isPresent()) {

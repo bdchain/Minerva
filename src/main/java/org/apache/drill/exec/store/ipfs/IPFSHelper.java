@@ -48,6 +48,10 @@ public class IPFSHelper {
     }
   }
 
+  public Multihash getMyID() {
+    return myID;
+  }
+
   public List<Multihash> findprovsTimeout(Multihash id, int maxPeers, int timeout) throws IOException {
     List<String> providers;
     providers = client.dht.findprovsListTimeout(id, maxPeers, timeout);
