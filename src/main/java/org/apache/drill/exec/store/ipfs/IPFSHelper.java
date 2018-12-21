@@ -22,6 +22,7 @@ import org.bouncycastle.util.Strings;
 
 
 public class IPFSHelper {
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSHelper.class);
 
   public static String IPFS_NULL_OBJECT = "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n";
 
@@ -110,7 +111,38 @@ public class IPFSHelper {
     return getPeerData(peerId, "drill-ready").isPresent();
   }
 
+  public Optional<Multihash> getIPNSDataHash(Multihash peerId) {
+    Optional<List<MerkleNode>> links = getPeerLinks(peerId);
+    if (!links.isPresent()) {
+      return Optional.empty();
+    }
+
+    return links.get().stream()
+        .filter(l -> l.name.equals(Optional.of("drill-data")))
+        .findFirst()
+        .map(l -> l.hash);
+  }
+
+
   private Optional<byte[]> getPeerData(Multihash peerId, String key) {
+    Optional<List<MerkleNode>> links = getPeerLinks(peerId);
+    if (!links.isPresent()) {
+      return Optional.empty();
+    }
+
+    return links.get().stream()
+        .filter(l -> l.name.equals(Optional.of(key)))
+        .findFirst()
+        .map(l -> {
+          try {
+            return client.object.data(l.hash);
+          } catch (IOException e) {
+            return null;
+          }
+        });
+  }
+
+  private Optional<List<MerkleNode>> getPeerLinks(Multihash peerId) {
     try {
       Optional<String> optionalPath = client.name.resolve(peerId, 30);
       if (!optionalPath.isPresent()) {
@@ -119,17 +151,11 @@ public class IPFSHelper {
       String path = optionalPath.get().substring(6); // path starts with /ipfs/Qm...
 
       List<MerkleNode> links = client.object.get(Multihash.fromBase58(path)).links;
-
-      return links.stream()
-          .filter(l -> l.name.equals(Optional.of(key)))
-          .findFirst()
-          .map(l -> {
-            try {
-              return client.object.data(l.hash);
-            } catch (IOException e) {
-              return null;
-            }
-          });
+      if (links.size() < 1) {
+        return Optional.empty();
+      } else {
+        return Optional.of(links);
+      }
     } catch (IOException e) {
       return Optional.empty();
     }

@@ -10,6 +10,7 @@ import org.apache.drill.exec.store.SchemaConfig;
 import org.apache.drill.exec.store.SchemaFactory;
 
 import java.io.IOException;
+import java.security.InvalidParameterException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -57,7 +58,11 @@ public class IPFSSchemaFactory implements SchemaFactory{
     @Override
     public Table getTable(String tableName) {
       logger.debug("getTable in IPFSTables {}", tableName);
-      IPFSScanSpec spec = new IPFSScanSpec(tableName);
+      if (!tableName.startsWith("/")) {
+        throw new InvalidParameterException("IPFS path must start with /");
+      }
+      String[] parts = tableName.substring(1).split("/");
+      IPFSScanSpec spec = new IPFSScanSpec(parts[1], IPFSScanSpec.Prefix.of(parts[0]));
       return tables.computeIfAbsent(name,
           n -> new DynamicDrillTable(plugin, schemaName, spec));
     }

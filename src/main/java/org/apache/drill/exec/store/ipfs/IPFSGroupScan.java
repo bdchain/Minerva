@@ -74,7 +74,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   public IPFSGroupScan(IPFSStoragePlugin ipfsStoragePlugin,
                        IPFSScanSpec ipfsScanSpec,
-                       List<SchemaPath> columns) {
+                       List<SchemaPath> columns) throws ExecutionSetupException {
     super((String) null);
     this.ipfsStoragePlugin = ipfsStoragePlugin;
     this.ipfsScanSpec = ipfsScanSpec;
@@ -85,12 +85,22 @@ public class IPFSGroupScan extends AbstractGroupScan {
     init();
   }
 
-  private void init() {
-    Multihash topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
+  private void init() throws  ExecutionSetupException {
 
     IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
     endpointWorksMap = new HashMap<>();
+
+    Multihash topHash = null;
+    switch (ipfsScanSpec.getPrefix()) {
+      case IPFS:
+        topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
+      case IPNS:
+        Multihash peerId = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
+        topHash = ipfsHelper.getIPNSDataHash(peerId).orElseThrow(
+            () -> new ExecutionSetupException("IPNS node has no drill-data field")
+        );
+    }
 
     try {
 
@@ -193,7 +203,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
       }
 
       logger.debug("start to recursively expand nested IPFS hashes, topHash={}", topHash);
-      //FIXME parallelization width magic number
+      //FIXME parallelization width magic number, maybe a config entry?
       ForkJoinPool forkJoinPool = new ForkJoinPool(6);
       IPFSTreeFlattener topTask = new IPFSTreeFlattener(topHash, false);
       Map<Multihash, String> leafAddrMap = forkJoinPool.invoke(topTask);
