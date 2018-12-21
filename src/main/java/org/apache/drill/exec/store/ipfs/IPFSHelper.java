@@ -48,6 +48,10 @@ public class IPFSHelper {
     }
   }
 
+  public IPFS getClient() {
+    return client;
+  }
+
   public Multihash getMyID() {
     return myID;
   }
