@@ -95,6 +95,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     switch (ipfsScanSpec.getPrefix()) {
       case IPFS:
         topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
+        break;
       case IPNS:
         Multihash peerId = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
         topHash = ipfsHelper.getIPNSDataHash(peerId).orElseThrow(
