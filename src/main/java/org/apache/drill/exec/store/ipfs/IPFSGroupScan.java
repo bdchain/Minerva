@@ -30,6 +30,7 @@ import org.apache.drill.exec.store.schedule.AssignmentCreator;
 import org.apache.drill.exec.store.schedule.EndpointByteMap;
 import org.apache.drill.exec.store.schedule.EndpointByteMapImpl;
 import org.apache.drill.exec.store.schedule.CompleteWork;
+import com.google.common.base.Stopwatch;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -41,6 +42,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @JsonTypeName("ipfs-scan")
@@ -204,11 +206,14 @@ public class IPFSGroupScan extends AbstractGroupScan {
       }
 
       logger.debug("start to recursively expand nested IPFS hashes, topHash={}", topHash);
+
+      Stopwatch watch = Stopwatch.createStarted();
       //FIXME parallelization width magic number, maybe a config entry?
       ForkJoinPool forkJoinPool = new ForkJoinPool(6);
       IPFSTreeFlattener topTask = new IPFSTreeFlattener(topHash, false);
       Map<Multihash, String> leafAddrMap = forkJoinPool.invoke(topTask);
 
+      logger.debug("Took {} ms to expand hash leaves", watch.elapsed(TimeUnit.MILLISECONDS));
       logger.debug("Iterating on {} leaves...", leafAddrMap.size());
       ClusterCoordinator coordinator = ipfsStoragePlugin.getContext().getClusterCoordinator();
       for (Multihash leaf : leafAddrMap.keySet()) {
