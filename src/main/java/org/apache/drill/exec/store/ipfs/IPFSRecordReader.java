@@ -1,5 +1,6 @@
 package org.apache.drill.exec.store.ipfs;
 
+import com.fasterxml.jackson.core.JsonParseException;
 import com.google.common.collect.ImmutableList;
 import io.ipfs.api.IPFS;
 import io.ipfs.multihash.Multihash;
@@ -11,7 +12,6 @@ import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.physical.impl.OutputMutator;
 import org.apache.drill.exec.store.AbstractRecordReader;
-import com.fasterxml.jackson.core.JsonParseException;
 import org.apache.drill.exec.store.easy.json.JsonProcessor;
 import org.apache.drill.exec.store.easy.json.reader.CountingJsonReader;
 import org.apache.drill.exec.vector.BaseValueVector;
@@ -81,7 +81,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
     try {
       IPFS client = plugin.getIPFSClient();
       byte[] rawDataBytes;
-      if (subScanSpec.equals(IPFSHelper.IPFS_NULL_OBJECT)) {
+      if (subScanSpec.equals(IPFSHelper.IPFS_NULL_OBJECT_HASH)) {
         // An empty ipfs object, but an empty string will make Jackson ObjectMapper fail
         // so treat it specially
         rawDataBytes = "[{}]".getBytes();

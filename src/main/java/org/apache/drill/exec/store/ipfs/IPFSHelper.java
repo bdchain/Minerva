@@ -4,9 +4,9 @@ import io.ipfs.api.IPFS;
 import io.ipfs.api.MerkleNode;
 import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
+import org.bouncycastle.util.Strings;
 
 import java.io.IOException;
-
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
@@ -17,14 +17,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import org.bouncycastle.util.Strings;
-
 
 
 public class IPFSHelper {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSHelper.class);
 
-  public static String IPFS_NULL_OBJECT = "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n";
+  public static String IPFS_NULL_OBJECT_HASH = "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n";
+  public static Multihash IPFS_NULL_OBJECT = Multihash.fromBase58(IPFS_NULL_OBJECT_HASH);
 
   private ExecutorService executorService;
   private IPFS client;

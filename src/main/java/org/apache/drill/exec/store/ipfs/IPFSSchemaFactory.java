@@ -4,13 +4,19 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Table;
+import org.apache.drill.exec.physical.base.PhysicalOperator;
+import org.apache.drill.exec.physical.base.Writer;
+import org.apache.drill.exec.planner.logical.CreateTableEntry;
 import org.apache.drill.exec.planner.logical.DynamicDrillTable;
 import org.apache.drill.exec.store.AbstractSchema;
 import org.apache.drill.exec.store.SchemaConfig;
 import org.apache.drill.exec.store.SchemaFactory;
+import org.apache.drill.exec.store.StorageStrategy;
 
 import java.io.IOException;
 import java.security.InvalidParameterException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -52,12 +58,17 @@ public class IPFSSchemaFactory implements SchemaFactory{
 
     @Override
     public Set<String> getTableNames() {
-      return tableNames;
+      return Collections.emptySet();
     }
 
     @Override
     public Table getTable(String tableName) {
+      //TODO: better handling of table names
       logger.debug("getTable in IPFSTables {}", tableName);
+      if (tableName.equals("create")) {
+        return null;
+      }
+
       if (!tableName.startsWith("/")) {
         throw new InvalidParameterException("IPFS path must start with /");
       }
@@ -65,6 +76,44 @@ public class IPFSSchemaFactory implements SchemaFactory{
       IPFSScanSpec spec = new IPFSScanSpec(parts[1], IPFSScanSpec.Prefix.of(parts[0]));
       return tables.computeIfAbsent(name,
           n -> new DynamicDrillTable(plugin, schemaName, spec));
+    }
+
+    @Override
+    public AbstractSchema getSubSchema(String name) {
+      return null;
+    }
+
+    @Override
+    public Set<String> getSubSchemaNames() {
+      return Collections.emptySet();
+    }
+
+    @Override
+    public CreateTableEntry createNewTable(String tableName, List<String> partitionColumns, StorageStrategy storageStrategy) {
+      return createNewTable(tableName, partitionColumns);
+    }
+
+    @Override
+    public CreateTableEntry createNewTable(final String tableName, List<String> partitionColumns) {
+      return new CreateTableEntry(){
+
+        @Override
+        public Writer getWriter(PhysicalOperator child) throws IOException {
+          return new IPFSWriter(child, tableName, plugin);
+        }
+
+        @Override
+        public List<String> getPartitionColumns() {
+          return Collections.emptyList();
+        }
+
+      };
+    }
+
+    @Override
+    public boolean isMutable() {
+      logger.debug("IPFS Schema isMutable called");
+      return true;
     }
   }
 }

@@ -1,15 +1,16 @@
 package org.apache.drill.exec.store.ipfs;
 
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.ipfs.api.IPFS;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.drill.common.JSONOptions;
 import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.store.AbstractStoragePlugin;
 import org.apache.drill.exec.store.SchemaConfig;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.ipfs.api.IPFS;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -34,7 +35,7 @@ public class IPFSStoragePlugin extends AbstractStoragePlugin {
 
   @Override
   public boolean supportsWrite() {
-    return false;
+    return true;
   }
 
   @Override

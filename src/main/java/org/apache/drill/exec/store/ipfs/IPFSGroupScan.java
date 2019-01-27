@@ -2,20 +2,21 @@ package org.apache.drill.exec.store.ipfs;
 
 
 import com.fasterxml.jackson.annotation.JacksonInject;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
+import io.ipfs.api.IPFS;
 import io.ipfs.api.MerkleNode;
 import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
-import io.ipfs.api.IPFS;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
+import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.common.util.DrillVersionInfo;
 import org.apache.drill.exec.coord.ClusterCoordinator;
@@ -27,9 +28,9 @@ import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 import org.apache.drill.exec.store.StoragePluginRegistry;
 import org.apache.drill.exec.store.schedule.AffinityCreator;
 import org.apache.drill.exec.store.schedule.AssignmentCreator;
+import org.apache.drill.exec.store.schedule.CompleteWork;
 import org.apache.drill.exec.store.schedule.EndpointByteMap;
 import org.apache.drill.exec.store.schedule.EndpointByteMapImpl;
-import org.apache.drill.exec.store.schedule.CompleteWork;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -74,7 +75,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   public IPFSGroupScan(IPFSStoragePlugin ipfsStoragePlugin,
                        IPFSScanSpec ipfsScanSpec,
-                       List<SchemaPath> columns) throws ExecutionSetupException {
+                       List<SchemaPath> columns) {
     super((String) null);
     this.ipfsStoragePlugin = ipfsStoragePlugin;
     this.ipfsScanSpec = ipfsScanSpec;
@@ -85,7 +86,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     init();
   }
 
-  private void init() throws  ExecutionSetupException {
+  private void init() {
 
     IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
@@ -99,7 +100,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
       case IPNS:
         Multihash peerId = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
         topHash = ipfsHelper.getIPNSDataHash(peerId).orElseThrow(
-            () -> new ExecutionSetupException("IPNS node has no drill-data field")
+            () -> UserException.validationError().message("IPNS node has no drill-data field").build(logger)
         );
     }
 
