@@ -4,9 +4,9 @@ import io.ipfs.api.IPFS;
 import io.ipfs.api.MerkleNode;
 import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
+import org.bouncycastle.util.Strings;
 
 import java.io.IOException;
-
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
@@ -16,8 +16,6 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
-
-import org.bouncycastle.util.Strings;
 
 
 
@@ -108,7 +106,11 @@ public class IPFSHelper {
   }
 
   public boolean isDrillReady(Multihash peerId) {
-    return getPeerData(peerId, "drill-ready").isPresent();
+    try {
+      return getPeerData(peerId, "drill-ready").isPresent();
+    } catch (RuntimeException e) {
+      return false;
+    }
   }
 
   public Optional<Multihash> getIPNSDataHash(Multihash peerId) {
