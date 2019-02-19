@@ -107,7 +107,11 @@ public class IPFSHelper {
   }
 
   public boolean isDrillReady(Multihash peerId) {
-    return getPeerData(peerId, "drill-ready").isPresent();
+    try {
+      return getPeerData(peerId, "drill-ready").isPresent();
+    } catch (RuntimeException e) {
+      return false;
+    }
   }
 
   public Optional<Multihash> getIPNSDataHash(Multihash peerId) {
