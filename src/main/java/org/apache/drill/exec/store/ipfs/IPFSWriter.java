@@ -57,7 +57,7 @@ public class IPFSWriter extends AbstractWriter {
   }
 
   @JsonIgnore
-  public IPFSStoragePlugin getPlugin() {
+  public IPFSStoragePlugin getStoragePlugin() {
     return plugin;
   }
 }
