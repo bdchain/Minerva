@@ -75,7 +75,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
   public void setup(OperatorContext context, OutputMutator output) throws ExecutionSetupException {
     logger.debug("IPFSRecordReader setup, query {}", subScanSpec);
     Multihash rootHash = Multihash.fromBase58(subScanSpec);
-    logger.debug("I am RecordReader {}", plugin.getContext().getEndpoint());
+    //logger.debug("I am RecordReader {}", plugin.getContext().getEndpoint());
     logger.debug("rootHash={}", rootHash);
 
     try {
@@ -146,7 +146,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
 
   @Override
   public int next() {
-    logger.debug("I am IPFSRecordReader {} calling next", plugin.getContext().getEndpoint());
+    //logger.debug("I am IPFSRecordReader {} calling next", plugin.getContext().getEndpoint());
     writer.allocate();
     writer.reset();
     recordCount = 0;
