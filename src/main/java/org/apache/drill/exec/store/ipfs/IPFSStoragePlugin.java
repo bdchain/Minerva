@@ -5,15 +5,19 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableSet;
 import io.ipfs.api.IPFS;
+import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.drill.common.JSONOptions;
 import org.apache.drill.common.expression.SchemaPath;
+import org.apache.drill.exec.ops.OptimizerRulesContext;
+import org.apache.drill.exec.planner.PlannerPhase;
 import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.store.AbstractStoragePlugin;
 import org.apache.drill.exec.store.SchemaConfig;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 public class IPFSStoragePlugin extends AbstractStoragePlugin {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSStoragePlugin.class);
@@ -55,6 +59,16 @@ public class IPFSStoragePlugin extends AbstractStoragePlugin {
     IPFSScanSpec spec = selection.getListWith(new ObjectMapper(), new TypeReference<IPFSScanSpec>() {});
     logger.debug("IPFSStoragePlugin getPhysicalScan with selection {}, columns {}", selection, columns);
     return new IPFSGroupScan(ipfsContext, spec, columns);
+  }
+
+  @Override
+  public Set<? extends RelOptRule> getOptimizerRules(OptimizerRulesContext optimizerContext, PlannerPhase phase) {
+    switch (phase) {
+      case PHYSICAL:
+        return ImmutableSet.of(IPFSAggWriterPrule.INSTANCE);
+      default:
+        return ImmutableSet.of();
+    }
   }
 
   public IPFS getIPFSClient() {
