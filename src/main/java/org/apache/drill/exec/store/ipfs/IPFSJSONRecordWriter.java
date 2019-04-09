@@ -8,7 +8,7 @@ import io.ipfs.api.MerkleNode;
 import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.record.VectorAccessible;
 import org.apache.drill.exec.store.JSONOutputRecordWriter;
-import org.apache.drill.exec.vector.complex.fn.ExtendedJsonOutput;
+import org.apache.drill.exec.vector.complex.fn.BasicJsonOutput;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -44,7 +44,7 @@ public class IPFSJSONRecordWriter extends JSONOutputRecordWriter implements IPFS
     stream = new ByteArrayOutputStream();
     JsonGenerator generator = factory.createGenerator(stream).useDefaultPrettyPrinter().configure(JsonGenerator.Feature.QUOTE_NON_NUMERIC_NUMBERS, true);
     generator = generator.setPrettyPrinter(new MinimalPrettyPrinter(LINE_FEED));
-    gen = new ExtendedJsonOutput(generator);
+    gen = new BasicJsonOutput(generator);
   }
 
   @Override
