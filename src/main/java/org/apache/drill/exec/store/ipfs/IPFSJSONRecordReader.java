@@ -23,8 +23,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 
-public class IPFSRecordReader extends AbstractRecordReader {
-  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSRecordReader.class);
+public class IPFSJSONRecordReader extends AbstractRecordReader {
+  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSJSONRecordReader.class);
 
   public static final long DEFAULT_ROWS_PER_BATCH = BaseValueVector.INITIAL_VALUE_ALLOCATION;
 
@@ -46,7 +46,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
   private JsonProcessor.ReadState write = null;
   private VectorContainerWriter writer;
 
-  public IPFSRecordReader(FragmentContext fragmentContext, IPFSStoragePlugin plugin, String scanSpec, List<SchemaPath> columns) {
+  public IPFSJSONRecordReader(FragmentContext fragmentContext, IPFSStoragePlugin plugin, String scanSpec, List<SchemaPath> columns) {
     this.fragmentContext = fragmentContext;
     this.plugin = plugin;
     this.subScanSpec = scanSpec;
@@ -73,7 +73,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
 
   @Override
   public void setup(OperatorContext context, OutputMutator output) throws ExecutionSetupException {
-    logger.debug("IPFSRecordReader setup, query {}", subScanSpec);
+    logger.debug("IPFSJSONRecordReader setup, query {}", subScanSpec);
     Multihash rootHash = Multihash.fromBase58(subScanSpec);
     //logger.debug("I am RecordReader {}", plugin.getContext().getEndpoint());
     logger.debug("rootHash={}", rootHash);
@@ -146,7 +146,7 @@ public class IPFSRecordReader extends AbstractRecordReader {
 
   @Override
   public int next() {
-    //logger.debug("I am IPFSRecordReader {} calling next", plugin.getContext().getEndpoint());
+    //logger.debug("I am IPFSJSONRecordReader {} calling next", plugin.getContext().getEndpoint());
     writer.allocate();
     writer.reset();
     recordCount = 0;
@@ -201,6 +201,6 @@ public class IPFSRecordReader extends AbstractRecordReader {
     if(stream != null) {
       stream.close();
     }
-    logger.debug("IPFSRecordReader close");
+    logger.debug("IPFSJSONRecordReader close");
   }
 }

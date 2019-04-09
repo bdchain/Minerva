@@ -14,7 +14,6 @@ import org.apache.drill.exec.store.SchemaFactory;
 import org.apache.drill.exec.store.StorageStrategy;
 
 import java.io.IOException;
-import java.security.InvalidParameterException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -69,11 +68,7 @@ public class IPFSSchemaFactory implements SchemaFactory{
         return null;
       }
 
-      if (!tableName.startsWith("/")) {
-        throw new InvalidParameterException("IPFS path must start with /");
-      }
-      String[] parts = tableName.substring(1).split("/");
-      IPFSScanSpec spec = new IPFSScanSpec(parts[1], IPFSScanSpec.Prefix.of(parts[0]));
+      IPFSScanSpec spec = new IPFSScanSpec(tableName);
       return tables.computeIfAbsent(name,
           n -> new DynamicDrillTable(plugin, schemaName, spec));
     }

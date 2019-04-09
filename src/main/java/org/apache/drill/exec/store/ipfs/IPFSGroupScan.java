@@ -16,7 +16,6 @@ import io.ipfs.api.MerkleNode;
 import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
-import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.common.util.DrillVersionInfo;
 import org.apache.drill.exec.coord.ClusterCoordinator;
@@ -92,17 +91,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
     endpointWorksMap = new HashMap<>();
 
-    Multihash topHash = null;
-    switch (ipfsScanSpec.getPrefix()) {
-      case IPFS:
-        topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
-        break;
-      case IPNS:
-        Multihash peerId = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
-        topHash = ipfsHelper.getIPNSDataHash(peerId).orElseThrow(
-            () -> UserException.validationError().message("IPNS node has no drill-data field").build(logger)
-        );
-    }
+    Multihash topHash = ipfsScanSpec.getTargetHash(ipfsHelper);
 
     try {
 
@@ -346,13 +335,13 @@ public class IPFSGroupScan extends AbstractGroupScan {
     logger.debug("workList == null: " + (workList == null? "true": "false"));
     logger.debug(String.format("workList.size(): %d", workList.size()));
 
-    List<String> scanSpecList = Lists.newArrayList();
+    List<Multihash> scanSpecList = Lists.newArrayList();
 
     for (IPFSWork work : workList) {
       scanSpecList.add(work.getPartialRootHash());
     }
 
-    return new IPFSSubScan(ipfsStoragePlugin, scanSpecList, columns);
+    return new IPFSSubScan(ipfsStoragePlugin, scanSpecList, ipfsScanSpec.getFormatExtension(), columns);
   }
 
   @Override
@@ -385,10 +374,6 @@ public class IPFSGroupScan extends AbstractGroupScan {
     return new IPFSGroupScan(this);
   }
 
-  @JsonIgnore
-  public String getTargetHash() {
-    return getIPFSScanSpec().getTargetHash();
-  }
 
 
   @Override
@@ -403,15 +388,19 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private class IPFSWork implements CompleteWork {
     private EndpointByteMapImpl byteMap = new EndpointByteMapImpl();
-    private String partialRoot;
+    private Multihash partialRoot;
     private DrillbitEndpoint onEndpoint = null;
 
 
     public IPFSWork(String root) {
+      this.partialRoot = Multihash.fromBase58(root);
+    }
+
+    public IPFSWork(Multihash root) {
       this.partialRoot = root;
     }
 
-    public String getPartialRootHash() {return partialRoot;}
+    public Multihash getPartialRootHash() {return partialRoot;}
 
     public void setOnEndpoint(DrillbitEndpoint endpointAddress) {
       this.onEndpoint = endpointAddress;
