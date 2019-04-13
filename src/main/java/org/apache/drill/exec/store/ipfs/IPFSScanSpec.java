@@ -15,6 +15,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class IPFSScanSpec {
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSScanSpec.class);
+
   public enum Prefix {
     IPFS("ipfs"), IPNS("ipns");
 
@@ -61,7 +63,7 @@ public class IPFSScanSpec {
         case "csv":
           return CSV;
         default:
-          throw new InvalidParameterException("Unsupported prefix: " + what);
+          throw new InvalidParameterException("Unsupported format: " + what);
       }
     }
   }
@@ -75,18 +77,36 @@ public class IPFSScanSpec {
   public IPFSScanSpec (@JsonProperty("path") String path) {
     //FIXME: IPFS hashes are actually Base58 encoded, so "0" "O" "I" "l" are not valid
     //also CIDs can be encoded with different encodings, not necessarily Base58
-    Pattern tableNamePattern = Pattern.compile("^/(ipfs|ipns)/([A-Za-z0-9]{46}(/[^#]+)*)#(\\w+)$");
+    Pattern tableNamePattern = Pattern.compile("^/(ipfs|ipns)/([A-Za-z0-9]{46}(/[^#]+)*)(?:#(\\w+))?$");
     Matcher matcher = tableNamePattern.matcher(path);
     if (!matcher.matches()) {
-      throw UserException.validationError().message("Invalid IPFS path in query string. Use paths of pattern `^/(ipfs|ipns)/([A-Za-z0-9]{46}(/[^#]+)*)#(\\w+)$`").build();
+      throw UserException.validationError().message("Invalid IPFS path in query string. Use paths of pattern `/scheme/hashpath#format`, where scheme:= \"ipfs\"|\"ipns\", hashpath:= HASH [\"/\" path], HASH is IPFS Base58 encoded hash, path:= TEXT [\"/\" path], format:= \"json\"|\"csv\"").build(logger);
     } else {
       String prefix = matcher.group(1);
       String hashPath = matcher.group(2);
       String formatExtension = matcher.group(4);
+      if (formatExtension == null) {
+        formatExtension = "_FORMAT_OMITTED_";
+      }
+
+      logger.debug("prefix {}, hashPath {}, format {}", prefix, hashPath, formatExtension);
 
       this.path = hashPath;
       this.prefix = Prefix.of(prefix);
-      this.formatExtension = Format.of(formatExtension);
+      try {
+        this.formatExtension = Format.of(formatExtension);
+      } catch (InvalidParameterException e) {
+        //if format is omitted or not valid, try resolve it from file extension in the path
+        Pattern fileExtensionPattern = Pattern.compile("^.*\\.(\\w+)$");
+        Matcher fileExtensionMatcher = fileExtensionPattern.matcher(hashPath);
+        if (fileExtensionMatcher.matches()) {
+          this.formatExtension = Format.of(fileExtensionMatcher.group(1));
+          logger.debug("extracted format from query: {}", this.formatExtension);
+        } else {
+          logger.debug("failed to extract format from path: {}", hashPath);
+          throw UserException.validationError().message("File format is missing and cannot be extracted from query: %s. Please specify file format explicitly by appending `#csv` or `#json`, etc, to the IPFS path.", hashPath).build(logger);
+        }
+      }
     }
   }
 
@@ -98,14 +118,14 @@ public class IPFSScanSpec {
       if (result.containsKey("Path")) {
         topHashString = result.get("Path");
       } else {
-        throw UserException.validationError().message("Non-existent IPFS path: {}", toString()).build(IPFSHelper.logger);
+        throw UserException.validationError().message("Non-existent IPFS path: %s", toString()).build(logger);
       }
       topHashString = result.get("Path");
       // returns in form of /ipfs/Qma...
       Multihash topHash = Multihash.fromBase58(topHashString.split("/")[2]);
       return topHash;
     } catch (IOException e) {
-      throw UserException.executionError(e).message("Unable to resolve IPFS path; is it a valid IPFS path?").build(IPFSHelper.logger);
+      throw UserException.executionError(e).message("Unable to resolve IPFS path; is it a valid IPFS path?").build(logger);
     }
   }
 
