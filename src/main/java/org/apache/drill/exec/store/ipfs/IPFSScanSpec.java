@@ -1,25 +1,37 @@
 package org.apache.drill.exec.store.ipfs;
 
 
+import com.fasterxml.jackson.annotation.JacksonInject;
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableSet;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
 import io.ipfs.multihash.Multihash;
+import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.exceptions.UserException;
+import org.apache.drill.exec.store.StoragePluginRegistry;
 
 import java.io.IOException;
 import java.security.InvalidParameterException;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@JsonTypeName("IPFSScanSpec")
 public class IPFSScanSpec {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSScanSpec.class);
 
   public enum Prefix {
-    IPFS("ipfs"), IPNS("ipns");
+    @JsonProperty("ipfs")
+    IPFS("ipfs"),
+    @JsonProperty("ipns")
+    IPNS("ipns");
 
+    @JsonProperty("prefix")
     private String name;
     Prefix(String prefix) {
       this.name = prefix;
@@ -30,6 +42,7 @@ public class IPFSScanSpec {
       return this.name;
     }
 
+    @JsonCreator
     public static Prefix of(String what) {
       switch (what) {
         case "ipfs" :
@@ -43,7 +56,10 @@ public class IPFSScanSpec {
   }
 
   public enum Format {
-    JSON("json"), CSV("csv");
+    @JsonProperty("json")
+    JSON("json"),
+    @JsonProperty("csv")
+    CSV("csv");
 
     @JsonProperty("format")
     private String name;
@@ -56,6 +72,7 @@ public class IPFSScanSpec {
       return this.name;
     }
 
+    @JsonCreator
     public static Format of(String what) {
       switch (what) {
         case "json" :
@@ -72,9 +89,26 @@ public class IPFSScanSpec {
   private Prefix prefix;
   private String path;
   private Format formatExtension;
+  private IPFSContext ipfsContext;
 
   @JsonCreator
-  public IPFSScanSpec (@JsonProperty("path") String path) {
+  public IPFSScanSpec (@JacksonInject StoragePluginRegistry registry,
+                       @JsonProperty("IPFSStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
+                       @JsonProperty("prefix") Prefix prefix,
+                       @JsonProperty("format") Format format,
+                       @JsonProperty("path") String path) throws ExecutionSetupException {
+    this.ipfsContext = ((IPFSStoragePlugin) registry.getPlugin(ipfsStoragePluginConfig)).getIPFSContext();
+    this.prefix = prefix;
+    this.formatExtension = format;
+    this.path = path;
+  }
+
+  public IPFSScanSpec (IPFSContext ipfsContext, String path) {
+    this.ipfsContext = ipfsContext;
+    parsePath(path);
+  }
+
+  private void parsePath(String path) {
     //FIXME: IPFS hashes are actually Base58 encoded, so "0" "O" "I" "l" are not valid
     //also CIDs can be encoded with different encodings, not necessarily Base58
     Pattern tableNamePattern = Pattern.compile("^/(ipfs|ipns)/([A-Za-z0-9]{46}(/[^#]+)*)(?:#(\\w+))?$");
@@ -113,7 +147,11 @@ public class IPFSScanSpec {
   @JsonProperty
   public Multihash getTargetHash(IPFSHelper helper) {
     try {
-      Map<String, String> result = (Map<String, String>) helper.getClient().resolve(prefix.toString(), path, true);
+      Map<String, String> result = (Map<String, String>) helper.timedFailure(
+          (List args) -> helper.getClient().resolve((String) args.get(0), (String) args.get(1), true),
+          ImmutableList.of(prefix.toString(), path),
+          ipfsContext.getStoragePluginConfig().getIpfsTimeout()
+      );
       String topHashString;
       if (result.containsKey("Path")) {
         topHashString = result.get("Path");
@@ -137,6 +175,16 @@ public class IPFSScanSpec {
   @JsonProperty
   public Format getFormatExtension() {
     return formatExtension;
+  }
+
+  @JsonIgnore
+  public IPFSContext getIPFSContext() {
+    return ipfsContext;
+  }
+
+  @JsonProperty("IPFSStoragePluginConfig")
+  public IPFSStoragePluginConfig getIPFSStoragePluginConfig() {
+    return ipfsContext.getStoragePluginConfig();
   }
 
   @Override

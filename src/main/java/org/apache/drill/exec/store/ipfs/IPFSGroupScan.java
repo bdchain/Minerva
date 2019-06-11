@@ -47,7 +47,7 @@ import java.util.stream.Collectors;
 @JsonTypeName("ipfs-scan")
 public class IPFSGroupScan extends AbstractGroupScan {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSGroupScan.class);
-  private IPFSStoragePlugin ipfsStoragePlugin;
+  private IPFSContext ipfsContext;
   private IPFSScanSpec ipfsScanSpec;
   private List<SchemaPath> columns;
 
@@ -66,21 +66,25 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
 
   @JsonCreator
-  public IPFSGroupScan(@JsonProperty("ipfsScanSpec") IPFSScanSpec ipfsScanSpec,
-                       @JsonProperty("ipfsStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
+  public IPFSGroupScan(@JsonProperty("IPFSScanSpec") IPFSScanSpec ipfsScanSpec,
+                       @JsonProperty("IPFSStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
                        @JsonProperty("columns") List<SchemaPath> columns,
                        @JacksonInject StoragePluginRegistry pluginRegistry) throws IOException, ExecutionSetupException {
-    this((IPFSStoragePlugin) pluginRegistry.getPlugin(ipfsStoragePluginConfig), ipfsScanSpec, columns);
+    this(
+        ((IPFSStoragePlugin) pluginRegistry.getPlugin(ipfsStoragePluginConfig)).getIPFSContext(),
+        ipfsScanSpec,
+        columns
+    );
   }
 
-  public IPFSGroupScan(IPFSStoragePlugin ipfsStoragePlugin,
+  public IPFSGroupScan(IPFSContext ipfsContext,
                        IPFSScanSpec ipfsScanSpec,
                        List<SchemaPath> columns) {
     super((String) null);
-    this.ipfsStoragePlugin = ipfsStoragePlugin;
+    this.ipfsContext = ipfsContext;
     this.ipfsScanSpec = ipfsScanSpec;
-    this.maxNodesPerLeaf = ipfsStoragePlugin.getConfig().getMaxNodesPerLeaf();
-    this.ipfsTimeout = ipfsStoragePlugin.getConfig().getIpfsTimeout();
+    this.maxNodesPerLeaf = ipfsContext.getStoragePluginConfig().getMaxNodesPerLeaf();
+    this.ipfsTimeout = ipfsContext.getStoragePluginConfig().getIpfsTimeout();
     logger.debug("GroupScan constructor called with columns {}", columns);
     this.columns = columns == null || columns.size() == 0? ALL_COLUMNS : columns;
     init();
@@ -88,7 +92,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private void init() {
 
-    IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
+    IPFS ipfs = ipfsContext.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
     ipfsHelper.setMaxPeersPerLeaf(maxNodesPerLeaf);
     ipfsHelper.setTimeout(ipfsTimeout);
@@ -122,7 +126,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
               return ret;
             }
 
-            MerkleNode metaOrSimpleNode = ipfsHelper.getClient().object.links(hash);
+            MerkleNode metaOrSimpleNode = ipfsHelper.timedFailure(ipfsHelper.getClient().object::links, hash, ipfsTimeout);
             if (metaOrSimpleNode.links.size() > 0) {
               logger.debug("{} is a meta node", hash);
               //TODO do something useful with leaf size, e.g. hint Drill about operation costs
@@ -205,13 +209,13 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
       logger.debug("start to recursively expand nested IPFS hashes, topHash={}", topHash);
       //FIXME parallelization width magic number, maybe a config entry?
-      ForkJoinPool forkJoinPool = new ForkJoinPool(ipfsStoragePlugin.getConfig().getNumWorkerThreads());
+      ForkJoinPool forkJoinPool = new ForkJoinPool(ipfsContext.getStoragePluginConfig().getNumWorkerThreads());
       ipfsHelper.setExecutorService(Executors.newCachedThreadPool());
       IPFSTreeFlattener topTask = new IPFSTreeFlattener(topHash, false);
       Map<Multihash, String> leafAddrMap = forkJoinPool.invoke(topTask);
 
       logger.debug("Iterating on {} leaves...", leafAddrMap.size());
-      ClusterCoordinator coordinator = ipfsStoragePlugin.getContext().getClusterCoordinator();
+      ClusterCoordinator coordinator = ipfsContext.getStoragePlugin().getContext().getClusterCoordinator();
       for (Multihash leaf : leafAddrMap.keySet()) {
         String peerHostname = leafAddrMap.get(leaf);
 
@@ -261,7 +265,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private IPFSGroupScan(IPFSGroupScan that) {
     super(that);
-    this.ipfsStoragePlugin = that.ipfsStoragePlugin;
+    this.ipfsContext = that.ipfsContext;
     this.ipfsScanSpec = that.ipfsScanSpec;
     this.assignments = that.assignments;
     this.ipfsWorkList = that.ipfsWorkList;
@@ -276,7 +280,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   @JsonIgnore
   public IPFSStoragePlugin getStoragePlugin() {
-    return ipfsStoragePlugin;
+    return ipfsContext.getStoragePlugin();
   }
 
   @JsonProperty
@@ -294,7 +298,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   @Override
   public int getMaxParallelizationWidth() {
-    DrillbitEndpoint myself = ipfsStoragePlugin.getContext().getEndpoint();
+    DrillbitEndpoint myself = ipfsContext.getStoragePlugin().getContext().getEndpoint();
     int width;
     if (endpointWorksMap.containsKey(myself.getAddress())) {
       // the foreman is also going to be a minor fragment worker under a UnionExchange operator
@@ -352,7 +356,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
       scanSpecList.add(work.getPartialRootHash());
     }
 
-    return new IPFSSubScan(ipfsStoragePlugin, scanSpecList, ipfsScanSpec.getFormatExtension(), columns);
+    return new IPFSSubScan(ipfsContext, scanSpecList, ipfsScanSpec.getFormatExtension(), columns);
   }
 
   @Override

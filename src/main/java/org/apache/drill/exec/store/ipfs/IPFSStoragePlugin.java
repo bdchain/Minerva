@@ -3,6 +3,7 @@ package org.apache.drill.exec.store.ipfs;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableSet;
 import io.ipfs.api.IPFS;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.drill.common.JSONOptions;
@@ -17,15 +18,17 @@ import java.util.List;
 public class IPFSStoragePlugin extends AbstractStoragePlugin {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSStoragePlugin.class);
 
+  private final IPFSContext ipfsContext;
   private final IPFSStoragePluginConfig pluginConfig;
   private final IPFSSchemaFactory schemaFactory;
   private final IPFS ipfsClient;
 
   public IPFSStoragePlugin(IPFSStoragePluginConfig config, DrillbitContext context, String name) throws IOException {
     super(context, name);
-    this.schemaFactory = new IPFSSchemaFactory(this, name);
-    this.pluginConfig = config;
     this.ipfsClient = new IPFS(config.getHost(), config.getPort());
+    this.ipfsContext = new IPFSContext(config, this, ipfsClient);
+    this.schemaFactory = new IPFSSchemaFactory(this.ipfsContext, name);
+    this.pluginConfig = config;
   }
 
   @Override
@@ -43,7 +46,7 @@ public class IPFSStoragePlugin extends AbstractStoragePlugin {
     logger.debug("IPFSStoragePlugin before getPhysicalScan");
     IPFSScanSpec spec = selection.getListWith(new ObjectMapper(), new TypeReference<IPFSScanSpec>() {});
     logger.debug("IPFSStoragePlugin getPhysicalScan with selection {}", selection);
-    return new IPFSGroupScan(this, spec, null);
+    return new IPFSGroupScan(ipfsContext, spec, null);
   }
 
   @Override
@@ -51,7 +54,7 @@ public class IPFSStoragePlugin extends AbstractStoragePlugin {
     logger.debug("IPFSStoragePlugin before getPhysicalScan");
     IPFSScanSpec spec = selection.getListWith(new ObjectMapper(), new TypeReference<IPFSScanSpec>() {});
     logger.debug("IPFSStoragePlugin getPhysicalScan with selection {}, columns {}", selection, columns);
-    return new IPFSGroupScan(this, spec, columns);
+    return new IPFSGroupScan(ipfsContext, spec, columns);
   }
 
   public IPFS getIPFSClient() {
@@ -67,4 +70,9 @@ public class IPFSStoragePlugin extends AbstractStoragePlugin {
   public IPFSStoragePluginConfig getConfig() {
     return pluginConfig;
   }
+
+  public IPFSContext getIPFSContext() {
+    return ipfsContext;
+  }
+
 }

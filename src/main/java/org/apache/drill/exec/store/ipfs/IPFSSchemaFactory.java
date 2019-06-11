@@ -24,10 +24,10 @@ public class IPFSSchemaFactory implements SchemaFactory{
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSSchemaFactory.class);
 
   final String schemaName;
-  final IPFSStoragePlugin plugin;
+  final IPFSContext context;
 
-  public IPFSSchemaFactory(IPFSStoragePlugin plugin, String name) throws IOException {
-    this.plugin = plugin;
+  public IPFSSchemaFactory(IPFSContext context, String name) throws IOException {
+    this.context = context;
     this.schemaName = name;
   }
 
@@ -68,9 +68,9 @@ public class IPFSSchemaFactory implements SchemaFactory{
         return null;
       }
 
-      IPFSScanSpec spec = new IPFSScanSpec(tableName);
+      IPFSScanSpec spec = new IPFSScanSpec(context, tableName);
       return tables.computeIfAbsent(name,
-          n -> new DynamicDrillTable(plugin, schemaName, spec));
+          n -> new DynamicDrillTable(context.getStoragePlugin(), schemaName, spec));
     }
 
     @Override
@@ -94,7 +94,7 @@ public class IPFSSchemaFactory implements SchemaFactory{
 
         @Override
         public Writer getWriter(PhysicalOperator child) throws IOException {
-          return new IPFSWriter(child, tableName, plugin);
+          return new IPFSWriter(child, tableName, context);
         }
 
         @Override

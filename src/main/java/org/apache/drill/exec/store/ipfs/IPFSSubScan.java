@@ -35,7 +35,7 @@ import java.util.List;
 @JsonTypeName("ipfs-sub-scan")
 public class IPFSSubScan extends AbstractBase implements SubScan {
   private static int IPFS_SUB_SCAN_VALUE = 19155;
-  private final IPFSStoragePlugin ipfsStoragePlugin;
+  private final IPFSContext ipfsContext;
   private final List<Multihash> ipfsSubScanSpecList;
   private final IPFSScanSpec.Format format;
   private final List<SchemaPath> columns;
@@ -49,28 +49,29 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
                      @JsonProperty("columns") List<SchemaPath> columns
                      ) throws ExecutionSetupException {
     super((String) null);
-    ipfsStoragePlugin = (IPFSStoragePlugin) registry.getPlugin(ipfsStoragePluginConfig);
+    IPFSStoragePlugin plugin = (IPFSStoragePlugin) registry.getPlugin(ipfsStoragePluginConfig);
+    ipfsContext = plugin.getIPFSContext();
     this.ipfsSubScanSpecList = ipfsSubScanSpecList;
     this.format = format;
     this.columns = columns;
   }
 
-  public IPFSSubScan(IPFSStoragePlugin ipfsStoragePlugin, List<Multihash> ipfsSubScanSpecList, IPFSScanSpec.Format format, List<SchemaPath> columns) {
+  public IPFSSubScan(IPFSContext ipfsContext, List<Multihash> ipfsSubScanSpecList, IPFSScanSpec.Format format, List<SchemaPath> columns) {
     super((String) null);
-    this.ipfsStoragePlugin = ipfsStoragePlugin;
+    this.ipfsContext = ipfsContext;
     this.ipfsSubScanSpecList = ipfsSubScanSpecList;
     this.format = format;
     this.columns = columns;
   }
 
   @JsonIgnore
-  public IPFSStoragePlugin getIPFSStoragePlugin() {
-    return ipfsStoragePlugin;
+  public IPFSContext getIPFSContext() {
+    return ipfsContext;
   }
 
   @JsonProperty("IPFSStoragePluginConfig")
   public IPFSStoragePluginConfig getIPFSStoragePluginConfig() {
-    return ipfsStoragePlugin.getConfig();
+    return ipfsContext.getStoragePluginConfig();
   }
 
   @JsonProperty("columns")
@@ -112,7 +113,7 @@ public class IPFSSubScan extends AbstractBase implements SubScan {
 
   @Override
   public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) {
-    return new IPFSSubScan(ipfsStoragePlugin, ipfsSubScanSpecList, format, columns);
+    return new IPFSSubScan(ipfsContext, ipfsSubScanSpecList, format, columns);
   }
 
   public static class IPFSSubScanSpec {

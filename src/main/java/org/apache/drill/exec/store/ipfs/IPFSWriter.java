@@ -16,7 +16,7 @@ public class IPFSWriter extends AbstractWriter {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSWriter.class);
 
   static final int IPFS_WRITER_VALUE = 19156;
-  private final IPFSStoragePlugin plugin;
+  private final IPFSContext ipfsContext;
   private final String name;
 
 
@@ -27,15 +27,15 @@ public class IPFSWriter extends AbstractWriter {
       @JsonProperty("storageConfig") StoragePluginConfig storageConfig,
       @JacksonInject StoragePluginRegistry engineRegistry) throws IOException, ExecutionSetupException {
     super(child);
-    this.plugin = (IPFSStoragePlugin) engineRegistry.getPlugin(storageConfig);
+    this.ipfsContext= ((IPFSStoragePlugin) engineRegistry.getPlugin(storageConfig)).getIPFSContext();
     this.name = name;
   }
 
 
-  IPFSWriter(PhysicalOperator child, String name, IPFSStoragePlugin plugin) {
+  IPFSWriter(PhysicalOperator child, String name, IPFSContext ipfsContext) {
     super(child);
     this.name = name;
-    this.plugin = plugin;
+    this.ipfsContext = ipfsContext;
   }
 
   @Override
@@ -45,7 +45,7 @@ public class IPFSWriter extends AbstractWriter {
 
   @Override
   protected PhysicalOperator getNewWithChild(PhysicalOperator child) {
-    return new IPFSWriter(child, name, plugin);
+    return new IPFSWriter(child, name, ipfsContext);
   }
 
   public String getName() {
@@ -53,11 +53,11 @@ public class IPFSWriter extends AbstractWriter {
   }
 
   public IPFSStoragePluginConfig getStorageConfig() {
-    return plugin.getConfig();
+    return ipfsContext.getStoragePluginConfig();
   }
 
   @JsonIgnore
-  public IPFSStoragePlugin getStoragePlugin() {
-    return plugin;
+  public IPFSContext getIPFSContext() {
+    return ipfsContext;
   }
 }

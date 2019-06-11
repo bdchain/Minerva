@@ -22,7 +22,7 @@ public class IPFSWriterBatchCreator implements BatchCreator<IPFSWriter> {
       context,
       new IPFSJSONRecordWriter(
         null,
-        config.getStoragePlugin().getIPFSClient(),
+        config.getIPFSContext(),
         config.getName()
       ),
       amIForeman

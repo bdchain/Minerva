@@ -26,7 +26,6 @@ public class IPFSScanBatchCreator implements BatchCreator<IPFSSubScan> {
     Preconditions.checkArgument(children.isEmpty());
     List<RecordReader> readers = new LinkedList<>();
     List<SchemaPath> columns = null;
-    IPFSStoragePlugin plugin = subScan.getIPFSStoragePlugin();
     logger.debug(String.format("subScanSpecList.size = %d", subScan.getIPFSSubScanSpecList().size()));
 
     for (Multihash scanSpec : subScan.getIPFSSubScanSpecList()) {
@@ -37,13 +36,13 @@ public class IPFSScanBatchCreator implements BatchCreator<IPFSSubScan> {
         }
         RecordReader reader;
         if (subScan.getFormat() == IPFSScanSpec.Format.JSON) {
-          reader = new IPFSJSONRecordReader(context, plugin, scanSpec.toString(), columns);
+          reader = new IPFSJSONRecordReader(context, subScan.getIPFSContext(), scanSpec.toString(), columns);
         } else {
           TextParsingSettings settings = new TextParsingSettings();
           settings.set(new TextFormatConfig());
           //TODO: set this according to whether the leaf contains the header line
           settings.setHeaderExtractionEnabled(true);
-          reader = new IPFSTextRecordReader(scanSpec, plugin.getIPFSClient(), settings, columns);
+          reader = new IPFSTextRecordReader(subScan.getIPFSContext(), scanSpec, settings, columns);
         }
         readers.add(reader);
       } catch (Exception e1) {

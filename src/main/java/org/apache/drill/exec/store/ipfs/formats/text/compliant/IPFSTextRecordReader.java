@@ -4,7 +4,6 @@ import org.apache.drill.shaded.guava.com.google.common.base.Predicate;
 import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
 import org.apache.drill.shaded.guava.com.google.common.collect.Iterables;
 import com.univocity.parsers.common.TextParsingException;
-import io.ipfs.api.IPFS;
 import io.ipfs.multihash.Multihash;
 import io.netty.buffer.DrillBuf;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
@@ -14,6 +13,7 @@ import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.physical.impl.OutputMutator;
 import org.apache.drill.exec.store.AbstractRecordReader;
+import org.apache.drill.exec.store.ipfs.IPFSContext;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -32,7 +32,7 @@ public class IPFSTextRecordReader extends AbstractRecordReader {
       ImmutableList.of(SchemaPath.getSimplePath("_DEFAULT_COL_TO_READ_"));
 
   private final Multihash target;
-  private final IPFS client;
+  private final IPFSContext ipfsContext;
   // settings to be used while parsing
   private TextParsingSettings settings;
   // text reader implementation
@@ -44,9 +44,9 @@ public class IPFSTextRecordReader extends AbstractRecordReader {
   // operator context for OutputMutator
   private OperatorContext oContext;
 
-  public IPFSTextRecordReader(Multihash targetHash, IPFS client, TextParsingSettings settings, List<SchemaPath> columns) {
+  public IPFSTextRecordReader(IPFSContext ipfsContext, Multihash targetHash, TextParsingSettings settings, List<SchemaPath> columns) {
     this.target = targetHash;
-    this.client = client;
+    this.ipfsContext = ipfsContext;
     this.settings = settings;
     setColumns(columns);
 
@@ -104,7 +104,9 @@ public class IPFSTextRecordReader extends AbstractRecordReader {
 
       // setup Input using InputStream
       logger.trace("Reading IPFS object {}", target.toString());
-      byte[] rawDataBytes = client.object.data(target);
+      //FIXME add timeout control
+      //byte[] rawDataBytes = ipfsHelper.timedFailure(ipfsHelper.getClient().object::data, target, );
+      byte[] rawDataBytes = ipfsContext.getIPFSClient().object.data(target);
       stream = new SeekableByteArrayInputStream(rawDataBytes);
       input = new TextInput(settings, stream, readBuffer, 0, rawDataBytes.length);
 

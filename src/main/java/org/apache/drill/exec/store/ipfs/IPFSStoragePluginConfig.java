@@ -20,6 +20,8 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
     @JsonProperty("max-nodes-per-leaf")
     private final int maxNodesPerLeaf;
 
+    //TODO add more specific timeout configs fot different operations in IPFS,
+    // eg. provider resolution, data read, etc.
     @JsonProperty("ipfs-timeout")
     private final int ipfsTimeout;
 

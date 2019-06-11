@@ -2,7 +2,6 @@ package org.apache.drill.exec.store.ipfs;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
-import io.ipfs.api.IPFS;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.exceptions.UserException;
@@ -29,7 +28,7 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
   public static final long DEFAULT_ROWS_PER_BATCH = BaseValueVector.INITIAL_VALUE_ALLOCATION;
 
   private FragmentContext fragmentContext;
-  private IPFSStoragePlugin plugin;
+  private IPFSContext ipfsContext;
   private String subScanSpec;
   private List<SchemaPath> columnList;
   private JsonProcessor jsonReader;
@@ -47,9 +46,9 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
   private JsonProcessor.ReadState write = null;
   private VectorContainerWriter writer;
 
-  public IPFSJSONRecordReader(FragmentContext fragmentContext, IPFSStoragePlugin plugin, String scanSpec, List<SchemaPath> columns) {
+  public IPFSJSONRecordReader(FragmentContext fragmentContext, IPFSContext ipfsContext, String scanSpec, List<SchemaPath> columns) {
     this.fragmentContext = fragmentContext;
-    this.plugin = plugin;
+    this.ipfsContext = ipfsContext;
     this.subScanSpec = scanSpec;
     this.columnList = columns;
     setColumns(columns);
@@ -77,18 +76,19 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
   public void setup(OperatorContext context, OutputMutator output) throws ExecutionSetupException {
     logger.debug("IPFSJSONRecordReader setup, query {}", subScanSpec);
     Multihash rootHash = Multihash.fromBase58(subScanSpec);
-    //logger.debug("I am RecordReader {}", plugin.getContext().getEndpoint());
+    //logger.debug("I am RecordReader {}", ipfsContext.getContext().getEndpoint());
     logger.debug("rootHash={}", rootHash);
 
     try {
-      IPFS client = plugin.getIPFSClient();
+      IPFSHelper helper = new IPFSHelper(ipfsContext.getIPFSClient());
       byte[] rawDataBytes;
       if (subScanSpec.equals(IPFSHelper.IPFS_NULL_OBJECT_HASH)) {
         // An empty ipfs object, but an empty string will make Jackson ObjectMapper fail
         // so treat it specially
         rawDataBytes = "[{}]".getBytes();
       } else {
-        rawDataBytes = client.object.data(rootHash);
+        rawDataBytes = helper.timedFailure(helper.getClient().object::data,
+            rootHash, ipfsContext.getStoragePluginConfig().getIpfsTimeout());
       }
       String rootJson = new String(rawDataBytes);
       int  start = rootJson.indexOf("{");
@@ -148,7 +148,7 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
 
   @Override
   public int next() {
-    //logger.debug("I am IPFSJSONRecordReader {} calling next", plugin.getContext().getEndpoint());
+    //logger.debug("I am IPFSJSONRecordReader {} calling next", ipfsContext.getContext().getEndpoint());
     writer.allocate();
     writer.reset();
     recordCount = 0;

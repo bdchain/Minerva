@@ -27,8 +27,8 @@ public class IPFSJSONRecordWriter extends JSONOutputRecordWriter implements IPFS
   private boolean fRecordStarted = false;
   private String resultHash = null;
 
-  public IPFSJSONRecordWriter(OperatorContext context, IPFS client, String name) {
-    this.ipfs = client;
+  public IPFSJSONRecordWriter(OperatorContext context, IPFSContext ipfsContext, String name) {
+    this.ipfs = ipfsContext.getIPFSClient();
     this.name = name;
     logger.debug("IPFS record writer construct, name: {}", name);
     try {
@@ -98,6 +98,7 @@ public class IPFSJSONRecordWriter extends JSONOutputRecordWriter implements IPFS
     gen.flush();
     logger.debug("IPFSJSONRecordWriter: stream.size(): {}", stream.size());
     if (stream.size() > 0) {
+      //TODO add timeout
       MerkleNode node = ipfs.object.patch(
           IPFSHelper.IPFS_NULL_OBJECT,
           "set-data",
