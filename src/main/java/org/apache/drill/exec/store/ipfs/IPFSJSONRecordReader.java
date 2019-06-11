@@ -1,7 +1,7 @@
 package org.apache.drill.exec.store.ipfs;
 
 import com.fasterxml.jackson.core.JsonParseException;
-import com.google.common.collect.ImmutableList;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
 import io.ipfs.api.IPFS;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
@@ -38,6 +38,7 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
   private long runningRecordCount = 0;
   private final boolean enableAllTextMode;
   private final boolean enableNanInf;
+  private final boolean enableEscapeAnyChar;
   private final boolean readNumbersAsDouble;
   private final boolean unionEnabled;
   private long parseErrorCount;
@@ -55,6 +56,7 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
     this.fragmentContext = fragmentContext;
     // only enable all text mode if we aren't using embedded content mode.
     this.enableAllTextMode = fragmentContext.getOptions().getOption(ExecConstants.JSON_READER_ALL_TEXT_MODE_VALIDATOR);
+    this.enableEscapeAnyChar = fragmentContext.getOptions().getOption(ExecConstants.JSON_READER_ESCAPE_ANY_CHAR_VALIDATOR);
     this.enableNanInf = fragmentContext.getOptions().getOption(ExecConstants.JSON_READER_NAN_INF_NUMBERS_VALIDATOR);
     this.readNumbersAsDouble = fragmentContext.getOptions().getOption(ExecConstants.JSON_READ_NUMBERS_AS_DOUBLE_VALIDATOR);
     this.unionEnabled = fragmentContext.getOptions().getBoolean(ExecConstants.ENABLE_UNION_TYPE_KEY);
@@ -98,7 +100,7 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
 
       this.writer = new VectorContainerWriter(output, unionEnabled);
       if (isSkipQuery()) {
-        this.jsonReader = new CountingJsonReader(fragmentContext.getManagedBuffer(), enableNanInf);
+        this.jsonReader = new CountingJsonReader(fragmentContext.getManagedBuffer(), enableNanInf, enableEscapeAnyChar);
       } else {
         this.jsonReader = new JsonReader.Builder(fragmentContext.getManagedBuffer())
             .schemaPathColumns(ImmutableList.copyOf(getColumns()))

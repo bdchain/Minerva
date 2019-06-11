@@ -6,14 +6,14 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
+import org.apache.drill.shaded.guava.com.google.common.collect.Maps;
+import org.apache.drill.shaded.guava.com.google.common.base.Preconditions;
+import org.apache.drill.shaded.guava.com.google.common.collect.ArrayListMultimap;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
+import org.apache.drill.shaded.guava.com.google.common.collect.ListMultimap;
+import org.apache.drill.shaded.guava.com.google.common.collect.Lists;
 import io.ipfs.api.IPFS;
 import io.ipfs.api.MerkleNode;
-import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 import java.util.stream.Collectors;
@@ -89,12 +90,15 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
     IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
+    ipfsHelper.setMaxPeersPerLeaf(maxNodesPerLeaf);
+    ipfsHelper.setTimeout(ipfsTimeout);
     endpointWorksMap = new HashMap<>();
 
     Multihash topHash = ipfsScanSpec.getTargetHash(ipfsHelper);
+    Map<Multihash, IPFSPeer> peerMap = Maps.newConcurrentMap();
 
     try {
-
+      //TODO detect and warn about loops/recursions in a malformed tree
       class IPFSTreeFlattener extends RecursiveTask<Map<Multihash, String>> {
         private Multihash hash;
         private boolean isProvider;
@@ -109,13 +113,12 @@ public class IPFSGroupScan extends AbstractGroupScan {
         public Map<Multihash, String> compute() {
           try {
             if (isProvider) {
-              List<MultiAddress> multiAddresses = ipfsHelper.findpeerTimeout(hash, ipfsTimeout);
-              Optional<String> addr = IPFSHelper.pickPeerHost(multiAddresses);
-              if (addr.isPresent()) {
-                ret.put(hash, addr.get());
-              } else {
-                ret.put(hash, null);
+              if (!peerMap.containsKey(hash)) {
+                IPFSPeer newPeer = new IPFSPeer(ipfsHelper, hash);
+                peerMap.put(hash, newPeer);
               }
+              IPFSPeer peer = peerMap.get(hash);
+              ret.put(hash, peer.hasDrillbitAddress() ? peer.getDrillbitAddress().get() : null);
               return ret;
             }
 
@@ -140,26 +143,33 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
             } else {
               logger.debug("{} is a simple node", hash);
-              List<Multihash> providers = ipfsHelper.findprovsTimeout(hash, maxNodesPerLeaf, ipfsTimeout);
+              List<IPFSPeer> providers = ipfsHelper.findprovsTimeout(hash).stream()
+                  .map(id ->
+                    peerMap.containsKey(id) ?
+                    peerMap.get(id) :
+                    new IPFSPeer(ipfsHelper, id)
+                  )
+                  .collect(Collectors.toList());
               //FIXME isDrillReady may block threads
+              providers.forEach(p -> peerMap.put(p.getId(), p));
               providers = providers.stream()
-                  .filter(ipfsHelper::isDrillReady)
+                  .filter(IPFSPeer::isDrillReady)
                   .collect(Collectors.toList());
               if (providers.size() < 1) {
                 logger.warn("No drill-ready provider found for leaf {}, adding foreman as the provider", hash);
-                providers.add(ipfsHelper.getMyID());
+                providers.add(ipfsHelper.getSelf());
               }
 
               logger.debug("Got {} providers for {} from IPFS", providers.size(), hash);
               ImmutableList.Builder<IPFSTreeFlattener> builder = ImmutableList.builder();
-              for (Multihash provider : providers.subList(1, providers.size())) {
-                builder.add(new IPFSTreeFlattener(provider, true));
+              for (IPFSPeer provider : providers.subList(1, providers.size())) {
+                builder.add(new IPFSTreeFlattener(provider.getId(), true));
               }
               ImmutableList<IPFSTreeFlattener> subtasks = builder.build();
               subtasks.forEach(IPFSTreeFlattener::fork);
 
               List<String> possibleAddrs = new LinkedList<>();
-              Multihash firstProvider = providers.get(0);
+              Multihash firstProvider = providers.get(0).getId();
               IPFSTreeFlattener firstTask = new IPFSTreeFlattener(firstProvider, true);
               String firstAddr = firstTask.compute().get(firstProvider);
               if (firstAddr != null) {
@@ -195,7 +205,8 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
       logger.debug("start to recursively expand nested IPFS hashes, topHash={}", topHash);
       //FIXME parallelization width magic number, maybe a config entry?
-      ForkJoinPool forkJoinPool = new ForkJoinPool(6);
+      ForkJoinPool forkJoinPool = new ForkJoinPool(ipfsStoragePlugin.getConfig().getNumWorkerThreads());
+      ipfsHelper.setExecutorService(Executors.newCachedThreadPool());
       IPFSTreeFlattener topTask = new IPFSTreeFlattener(topHash, false);
       Map<Multihash, String> leafAddrMap = forkJoinPool.invoke(topTask);
 

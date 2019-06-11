@@ -23,6 +23,9 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
     @JsonProperty("ipfs-timeout")
     private final int ipfsTimeout;
 
+    @JsonProperty("groupscan-worker-threads")
+    private final int numWorkerThreads;
+
     @JsonProperty
     private final Map<String, FormatPluginConfig> formats;
 
@@ -32,11 +35,13 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
         @JsonProperty("port") int port,
         @JsonProperty("max-nodes-per-leaf") int maxNodesPerLeaf,
         @JsonProperty("ipfs-timeout") int ipfsTimeout,
+        @JsonProperty("groupscan-worker-threads") int numWorkerThreads,
         @JsonProperty("formats") Map<String, FormatPluginConfig> formats) {
         this.host = host;
         this.port = port;
-        this.maxNodesPerLeaf = maxNodesPerLeaf;
+        this.maxNodesPerLeaf = maxNodesPerLeaf > 0 ? maxNodesPerLeaf : 1;
         this.ipfsTimeout = ipfsTimeout;
+        this.numWorkerThreads = numWorkerThreads > 0 ? numWorkerThreads : 1;
         this.formats = formats;
     }
 
@@ -54,6 +59,10 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
 
     public int getIpfsTimeout() {
         return ipfsTimeout;
+    }
+
+    public int getNumWorkerThreads() {
+        return numWorkerThreads;
     }
 
     public Map<String, FormatPluginConfig> getFormats() {
@@ -96,7 +105,8 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
         } else if (!host.equals(other.host)
             || port != other.port
             || maxNodesPerLeaf != other.maxNodesPerLeaf
-            || ipfsTimeout != other.ipfsTimeout) {
+            || ipfsTimeout != other.ipfsTimeout
+            || numWorkerThreads != other.numWorkerThreads ) {
             return false;
         }
         return true;

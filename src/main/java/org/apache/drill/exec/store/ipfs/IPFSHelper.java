@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 
@@ -29,9 +28,17 @@ public class IPFSHelper {
   private IPFS client;
   private Multihash myID;
   private List<MultiAddress> myAddrs;
+  private IPFSPeer myself;
+  private int maxPeersPerLeaf;
+  private int timeout;
+
+  public IPFSHelper(IPFS ipfs, ExecutorService executorService) {
+    this(ipfs);
+    this.executorService = executorService;
+  }
 
   public IPFSHelper(IPFS ipfs) {
-    executorService = Executors.newCachedThreadPool();
+    executorService = null;
     this.client = ipfs;
     try {
       Map res = client.id();
@@ -40,12 +47,25 @@ public class IPFSHelper {
           .stream()
           .map(addr -> new MultiAddress(addr))
           .collect(Collectors.toList());
-
+      myself = new IPFSPeer(this, myID);
     } catch (IOException e) {
       //TODO handle exception
       myID = null;
       myAddrs = Collections.emptyList();
+      myself = null;
     }
+  }
+
+  public void setExecutorService(ExecutorService executorService) {
+    this.executorService = executorService;
+  }
+
+  public void setTimeout(int timeout) {
+    this.timeout = timeout;
+  }
+
+  public void setMaxPeersPerLeaf(int maxPeersPerLeaf) {
+    this.maxPeersPerLeaf = maxPeersPerLeaf;
   }
 
   public IPFS getClient() {
@@ -56,21 +76,33 @@ public class IPFSHelper {
     return myID;
   }
 
-  public List<Multihash> findprovsTimeout(Multihash id, int maxPeers, int timeout) throws IOException {
+  public IPFSPeer getSelf() {
+    return myself;
+  }
+
+  public List<Multihash> findprovsTimeout(Multihash id) throws IOException {
     List<String> providers;
-    providers = client.dht.findprovsListTimeout(id, maxPeers, timeout);
+    if (executorService != null) {
+      providers = client.dht.findprovsListTimeout(id, maxPeersPerLeaf, timeout, executorService);
+    } else {
+      throw new NullPointerException("executor is null");
+    }
 
     List<Multihash> ret = providers.stream().map(str -> Multihash.fromBase58(str)).collect(Collectors.toList());
     return ret;
   }
 
-  public List<MultiAddress> findpeerTimeout(Multihash peerId, int timeout) throws IOException {
+  public List<MultiAddress> findpeerTimeout(Multihash peerId) throws IOException {
     if(peerId.equals(myID)) {
       return myAddrs;
     }
 
-    List<String> addrs = client.dht.findpeerListTimeout(peerId, timeout);
-
+    List<String> addrs;
+    if (executorService != null) {
+      addrs = client.dht.findpeerListTimeout(peerId, timeout, executorService);
+    } else {
+      throw new NullPointerException("executor is null");
+    }
     List<MultiAddress>
         ret = addrs
         .stream()

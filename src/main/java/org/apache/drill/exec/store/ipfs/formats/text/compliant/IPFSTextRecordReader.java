@@ -1,8 +1,8 @@
 package org.apache.drill.exec.store.ipfs.formats.text.compliant;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
+import org.apache.drill.shaded.guava.com.google.common.base.Predicate;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
+import org.apache.drill.shaded.guava.com.google.common.collect.Iterables;
 import com.univocity.parsers.common.TextParsingException;
 import io.ipfs.api.IPFS;
 import io.ipfs.multihash.Multihash;

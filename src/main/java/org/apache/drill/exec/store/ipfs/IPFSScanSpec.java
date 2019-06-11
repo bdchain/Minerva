@@ -3,7 +3,7 @@ package org.apache.drill.exec.store.ipfs;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.ImmutableSet;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableSet;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.UserException;
 

@@ -238,4 +238,10 @@ public class IPFSWriterRecordBatch extends AbstractRecordBatch<Writer> {
     @JsonProperty
     public String partialHash;
   }
+
+  @Override
+  public void dump() {
+    logger.error("IPFSWriterRecordBatch[container={}, popConfig={}, counter={}, fragmentUniqueId={}, schema={}]",
+        container, popConfig, counter, fragmentUniqueId, schema);
+  }
 }
