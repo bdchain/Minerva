@@ -6,6 +6,8 @@
       port: 5001,
       max-nodes-per-leaf: 3,
       ipfs-timeout: 5,
+      groupscan-worker-threads: 50,
+      formats: null,
       enabled: false
     }
   }

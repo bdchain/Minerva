@@ -2,19 +2,19 @@ package org.apache.drill.exec.store.ipfs;
 
 
 import com.fasterxml.jackson.annotation.JacksonInject;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import io.ipfs.api.MerkleNode;
-import io.ipfs.multiaddr.MultiAddress;
-import io.ipfs.multihash.Multihash;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import org.apache.drill.shaded.guava.com.google.common.collect.Maps;
+import org.apache.drill.shaded.guava.com.google.common.base.Preconditions;
+import org.apache.drill.shaded.guava.com.google.common.collect.ArrayListMultimap;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
+import org.apache.drill.shaded.guava.com.google.common.collect.ListMultimap;
+import org.apache.drill.shaded.guava.com.google.common.collect.Lists;
 import io.ipfs.api.IPFS;
+import io.ipfs.api.MerkleNode;
+import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.common.util.DrillVersionInfo;
@@ -27,10 +27,10 @@ import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
 import org.apache.drill.exec.store.StoragePluginRegistry;
 import org.apache.drill.exec.store.schedule.AffinityCreator;
 import org.apache.drill.exec.store.schedule.AssignmentCreator;
+import org.apache.drill.exec.store.schedule.CompleteWork;
 import org.apache.drill.exec.store.schedule.EndpointByteMap;
 import org.apache.drill.exec.store.schedule.EndpointByteMapImpl;
-import org.apache.drill.exec.store.schedule.CompleteWork;
-import com.google.common.base.Stopwatch;
+import org.apache.drill.shaded.guava.com.google.common.base.Stopwatch;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 import java.util.concurrent.TimeUnit;
@@ -48,7 +49,7 @@ import java.util.stream.Collectors;
 @JsonTypeName("ipfs-scan")
 public class IPFSGroupScan extends AbstractGroupScan {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSGroupScan.class);
-  private IPFSStoragePlugin ipfsStoragePlugin;
+  private IPFSContext ipfsContext;
   private IPFSScanSpec ipfsScanSpec;
   private List<SchemaPath> columns;
 
@@ -67,46 +68,43 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
 
   @JsonCreator
-  public IPFSGroupScan(@JsonProperty("ipfsScanSpec") IPFSScanSpec ipfsScanSpec,
-                       @JsonProperty("ipfsStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
+  public IPFSGroupScan(@JsonProperty("IPFSScanSpec") IPFSScanSpec ipfsScanSpec,
+                       @JsonProperty("IPFSStoragePluginConfig") IPFSStoragePluginConfig ipfsStoragePluginConfig,
                        @JsonProperty("columns") List<SchemaPath> columns,
                        @JacksonInject StoragePluginRegistry pluginRegistry) throws IOException, ExecutionSetupException {
-    this((IPFSStoragePlugin) pluginRegistry.getPlugin(ipfsStoragePluginConfig), ipfsScanSpec, columns);
+    this(
+        ((IPFSStoragePlugin) pluginRegistry.getPlugin(ipfsStoragePluginConfig)).getIPFSContext(),
+        ipfsScanSpec,
+        columns
+    );
   }
 
-  public IPFSGroupScan(IPFSStoragePlugin ipfsStoragePlugin,
+  public IPFSGroupScan(IPFSContext ipfsContext,
                        IPFSScanSpec ipfsScanSpec,
-                       List<SchemaPath> columns) throws ExecutionSetupException {
+                       List<SchemaPath> columns) {
     super((String) null);
-    this.ipfsStoragePlugin = ipfsStoragePlugin;
+    this.ipfsContext = ipfsContext;
     this.ipfsScanSpec = ipfsScanSpec;
-    this.maxNodesPerLeaf = ipfsStoragePlugin.getConfig().getMaxNodesPerLeaf();
-    this.ipfsTimeout = ipfsStoragePlugin.getConfig().getIpfsTimeout();
+    this.maxNodesPerLeaf = ipfsContext.getStoragePluginConfig().getMaxNodesPerLeaf();
+    this.ipfsTimeout = ipfsContext.getStoragePluginConfig().getIpfsTimeout();
     logger.debug("GroupScan constructor called with columns {}", columns);
     this.columns = columns == null || columns.size() == 0? ALL_COLUMNS : columns;
     init();
   }
 
-  private void init() throws  ExecutionSetupException {
+  private void init() {
 
-    IPFS ipfs = ipfsStoragePlugin.getIPFSClient();
+    IPFS ipfs = ipfsContext.getIPFSClient();
     IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
+    ipfsHelper.setMaxPeersPerLeaf(maxNodesPerLeaf);
+    ipfsHelper.setTimeout(ipfsTimeout);
     endpointWorksMap = new HashMap<>();
 
-    Multihash topHash = null;
-    switch (ipfsScanSpec.getPrefix()) {
-      case IPFS:
-        topHash = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
-        break;
-      case IPNS:
-        Multihash peerId = Multihash.fromBase58(ipfsScanSpec.getTargetHash());
-        topHash = ipfsHelper.getIPNSDataHash(peerId).orElseThrow(
-            () -> new ExecutionSetupException("IPNS node has no drill-data field")
-        );
-    }
+    Multihash topHash = ipfsScanSpec.getTargetHash(ipfsHelper);
+    Map<Multihash, IPFSPeer> peerMap = Maps.newConcurrentMap();
 
     try {
-
+      //TODO detect and warn about loops/recursions in a malformed tree
       class IPFSTreeFlattener extends RecursiveTask<Map<Multihash, String>> {
         private Multihash hash;
         private boolean isProvider;
@@ -121,17 +119,16 @@ public class IPFSGroupScan extends AbstractGroupScan {
         public Map<Multihash, String> compute() {
           try {
             if (isProvider) {
-              List<MultiAddress> multiAddresses = ipfsHelper.findpeerTimeout(hash, ipfsTimeout);
-              Optional<String> addr = IPFSHelper.pickPeerHost(multiAddresses);
-              if (addr.isPresent()) {
-                ret.put(hash, addr.get());
-              } else {
-                ret.put(hash, null);
+              if (!peerMap.containsKey(hash)) {
+                IPFSPeer newPeer = new IPFSPeer(ipfsHelper, hash);
+                peerMap.put(hash, newPeer);
               }
+              IPFSPeer peer = peerMap.get(hash);
+              ret.put(hash, peer.hasDrillbitAddress() ? peer.getDrillbitAddress().get() : null);
               return ret;
             }
 
-            MerkleNode metaOrSimpleNode = ipfsHelper.getClient().object.links(hash);
+            MerkleNode metaOrSimpleNode = ipfsHelper.timedFailure(ipfsHelper.getClient().object::links, hash, ipfsTimeout);
             if (metaOrSimpleNode.links.size() > 0) {
               logger.debug("{} is a meta node", hash);
               //TODO do something useful with leaf size, e.g. hint Drill about operation costs
@@ -152,26 +149,33 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
             } else {
               logger.debug("{} is a simple node", hash);
-              List<Multihash> providers = ipfsHelper.findprovsTimeout(hash, maxNodesPerLeaf, ipfsTimeout);
+              List<IPFSPeer> providers = ipfsHelper.findprovsTimeout(hash).stream()
+                  .map(id ->
+                    peerMap.containsKey(id) ?
+                    peerMap.get(id) :
+                    new IPFSPeer(ipfsHelper, id)
+                  )
+                  .collect(Collectors.toList());
               //FIXME isDrillReady may block threads
+              providers.forEach(p -> peerMap.put(p.getId(), p));
               providers = providers.stream()
-                  .filter(ipfsHelper::isDrillReady)
+                  .filter(IPFSPeer::isDrillReady)
                   .collect(Collectors.toList());
               if (providers.size() < 1) {
                 logger.warn("No drill-ready provider found for leaf {}, adding foreman as the provider", hash);
-                providers.add(ipfsHelper.getMyID());
+                providers.add(ipfsHelper.getSelf());
               }
 
               logger.debug("Got {} providers for {} from IPFS", providers.size(), hash);
               ImmutableList.Builder<IPFSTreeFlattener> builder = ImmutableList.builder();
-              for (Multihash provider : providers.subList(1, providers.size())) {
-                builder.add(new IPFSTreeFlattener(provider, true));
+              for (IPFSPeer provider : providers.subList(1, providers.size())) {
+                builder.add(new IPFSTreeFlattener(provider.getId(), true));
               }
               ImmutableList<IPFSTreeFlattener> subtasks = builder.build();
               subtasks.forEach(IPFSTreeFlattener::fork);
 
               List<String> possibleAddrs = new LinkedList<>();
-              Multihash firstProvider = providers.get(0);
+              Multihash firstProvider = providers.get(0).getId();
               IPFSTreeFlattener firstTask = new IPFSTreeFlattener(firstProvider, true);
               String firstAddr = firstTask.compute().get(firstProvider);
               if (firstAddr != null) {
@@ -209,13 +213,14 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
       Stopwatch watch = Stopwatch.createStarted();
       //FIXME parallelization width magic number, maybe a config entry?
-      ForkJoinPool forkJoinPool = new ForkJoinPool(6);
+      ForkJoinPool forkJoinPool = new ForkJoinPool(ipfsContext.getStoragePluginConfig().getNumWorkerThreads());
+      ipfsHelper.setExecutorService(Executors.newCachedThreadPool());
       IPFSTreeFlattener topTask = new IPFSTreeFlattener(topHash, false);
       Map<Multihash, String> leafAddrMap = forkJoinPool.invoke(topTask);
 
       logger.debug("Took {} ms to expand hash leaves", watch.elapsed(TimeUnit.MILLISECONDS));
       logger.debug("Iterating on {} leaves...", leafAddrMap.size());
-      ClusterCoordinator coordinator = ipfsStoragePlugin.getContext().getClusterCoordinator();
+      ClusterCoordinator coordinator = ipfsContext.getStoragePlugin().getContext().getClusterCoordinator();
       for (Multihash leaf : leafAddrMap.keySet()) {
         String peerHostname = leafAddrMap.get(leaf);
 
@@ -265,7 +270,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private IPFSGroupScan(IPFSGroupScan that) {
     super(that);
-    this.ipfsStoragePlugin = that.ipfsStoragePlugin;
+    this.ipfsContext = that.ipfsContext;
     this.ipfsScanSpec = that.ipfsScanSpec;
     this.assignments = that.assignments;
     this.ipfsWorkList = that.ipfsWorkList;
@@ -280,7 +285,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   @JsonIgnore
   public IPFSStoragePlugin getStoragePlugin() {
-    return ipfsStoragePlugin;
+    return ipfsContext.getStoragePlugin();
   }
 
   @JsonProperty
@@ -298,7 +303,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   @Override
   public int getMaxParallelizationWidth() {
-    DrillbitEndpoint myself = ipfsStoragePlugin.getContext().getEndpoint();
+    DrillbitEndpoint myself = ipfsContext.getStoragePlugin().getContext().getEndpoint();
     int width;
     if (endpointWorksMap.containsKey(myself.getAddress())) {
       // the foreman is also going to be a minor fragment worker under a UnionExchange operator
@@ -350,13 +355,13 @@ public class IPFSGroupScan extends AbstractGroupScan {
     logger.debug("workList == null: " + (workList == null? "true": "false"));
     logger.debug(String.format("workList.size(): %d", workList.size()));
 
-    List<String> scanSpecList = Lists.newArrayList();
+    List<Multihash> scanSpecList = Lists.newArrayList();
 
     for (IPFSWork work : workList) {
       scanSpecList.add(work.getPartialRootHash());
     }
 
-    return new IPFSSubScan(ipfsStoragePlugin, scanSpecList, columns);
+    return new IPFSSubScan(ipfsContext, scanSpecList, ipfsScanSpec.getFormatExtension(), columns);
   }
 
   @Override
@@ -389,10 +394,6 @@ public class IPFSGroupScan extends AbstractGroupScan {
     return new IPFSGroupScan(this);
   }
 
-  @JsonIgnore
-  public String getTargetHash() {
-    return getIPFSScanSpec().getTargetHash();
-  }
 
 
   @Override
@@ -407,15 +408,19 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
   private class IPFSWork implements CompleteWork {
     private EndpointByteMapImpl byteMap = new EndpointByteMapImpl();
-    private String partialRoot;
+    private Multihash partialRoot;
     private DrillbitEndpoint onEndpoint = null;
 
 
     public IPFSWork(String root) {
+      this.partialRoot = Multihash.fromBase58(root);
+    }
+
+    public IPFSWork(Multihash root) {
       this.partialRoot = root;
     }
 
-    public String getPartialRootHash() {return partialRoot;}
+    public Multihash getPartialRootHash() {return partialRoot;}
 
     public void setOnEndpoint(DrillbitEndpoint endpointAddress) {
       this.onEndpoint = endpointAddress;
