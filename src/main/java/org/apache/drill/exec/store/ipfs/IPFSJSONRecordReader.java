@@ -1,7 +1,6 @@
 package org.apache.drill.exec.store.ipfs;
 
 import com.fasterxml.jackson.core.JsonParseException;
-import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.exceptions.UserException;
@@ -13,9 +12,11 @@ import org.apache.drill.exec.physical.impl.OutputMutator;
 import org.apache.drill.exec.store.AbstractRecordReader;
 import org.apache.drill.exec.store.easy.json.JsonProcessor;
 import org.apache.drill.exec.store.easy.json.reader.CountingJsonReader;
+import org.apache.drill.exec.store.ipfs.IPFSStoragePluginConfig.IPFSTimeOut;
 import org.apache.drill.exec.vector.BaseValueVector;
 import org.apache.drill.exec.vector.complex.fn.JsonReader;
 import org.apache.drill.exec.vector.complex.impl.VectorContainerWriter;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -80,7 +81,7 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
     logger.debug("rootHash={}", rootHash);
 
     try {
-      IPFSHelper helper = new IPFSHelper(ipfsContext.getIPFSClient());
+      IPFSHelper helper = ipfsContext.getIPFSHelper();
       byte[] rawDataBytes;
       if (subScanSpec.equals(IPFSHelper.IPFS_NULL_OBJECT_HASH)) {
         // An empty ipfs object, but an empty string will make Jackson ObjectMapper fail
@@ -88,7 +89,7 @@ public class IPFSJSONRecordReader extends AbstractRecordReader {
         rawDataBytes = "[{}]".getBytes();
       } else {
         rawDataBytes = helper.timedFailure(helper.getClient().object::data,
-            rootHash, ipfsContext.getStoragePluginConfig().getIpfsTimeout());
+            rootHash, ipfsContext.getStoragePluginConfig().getIpfsTimeout(IPFSTimeOut.FETCH_DATA));
       }
       String rootJson = new String(rawDataBytes);
       int  start = rootJson.indexOf("{");

@@ -21,6 +21,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.drill.exec.store.ipfs.IPFSStoragePluginConfig.IPFSTimeOut.FIND_PEER_INFO;
+
 @JsonTypeName("IPFSScanSpec")
 public class IPFSScanSpec {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSScanSpec.class);
@@ -150,7 +152,7 @@ public class IPFSScanSpec {
       Map<String, String> result = (Map<String, String>) helper.timedFailure(
           (List args) -> helper.getClient().resolve((String) args.get(0), (String) args.get(1), true),
           ImmutableList.of(prefix.toString(), path),
-          ipfsContext.getStoragePluginConfig().getIpfsTimeout()
+          ipfsContext.getStoragePluginConfig().getIpfsTimeout(FIND_PEER_INFO)
       );
       String topHashString;
       if (result.containsKey("Path")) {

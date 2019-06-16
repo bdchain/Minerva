@@ -5,10 +5,14 @@
       host: "127.0.0.1",
       port: 5001,
       max-nodes-per-leaf: 3,
-      ipfs-timeout: 5,
+      ipfs-timeouts: {
+        find-provider: 4,
+        find-peer-info: 4,
+        fetch-data: 5
+      },
       groupscan-worker-threads: 50,
       formats: null,
-      enabled: false
+      enabled: true
     }
   }
 }

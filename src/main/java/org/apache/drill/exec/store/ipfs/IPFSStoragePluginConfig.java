@@ -1,11 +1,14 @@
 package org.apache.drill.exec.store.ipfs;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableMap;
 import org.apache.drill.common.logical.FormatPluginConfig;
 import org.apache.drill.common.logical.StoragePluginConfigBase;
 
+import java.security.InvalidParameterException;
 import java.util.Map;
 
 @JsonTypeName(IPFSStoragePluginConfig.NAME)
@@ -22,8 +25,49 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
 
     //TODO add more specific timeout configs fot different operations in IPFS,
     // eg. provider resolution, data read, etc.
-    @JsonProperty("ipfs-timeout")
-    private final int ipfsTimeout;
+    @JsonProperty("ipfs-timeouts")
+    private final Map<IPFSTimeOut, Integer> ipfsTimeouts;
+
+    @JsonIgnore
+    private final Map<IPFSTimeOut, Integer> ipfsTimeoutDefaults = ImmutableMap.of(
+        IPFSTimeOut.FIND_PROV, 4,
+        IPFSTimeOut.FIND_PEER_INFO, 4,
+        IPFSTimeOut.FETCH_DATA, 6
+    );
+
+    public enum IPFSTimeOut {
+        @JsonProperty("find-provider")
+        FIND_PROV("find-provider"),
+        @JsonProperty("find-peer-info")
+        FIND_PEER_INFO("find-peer-info"),
+        @JsonProperty("fetch-data")
+        FETCH_DATA("fetch-data");
+
+        @JsonProperty("type")
+        private String which;
+        IPFSTimeOut(String which) {
+            this.which = which;
+        }
+
+        @JsonCreator
+        public static IPFSTimeOut of(String which) {
+            switch (which) {
+                case "find-provider":
+                    return FIND_PROV;
+                case "find-peer-info":
+                    return FIND_PEER_INFO;
+                case "fetch-data":
+                    return FETCH_DATA;
+                default:
+                    throw new InvalidParameterException("Unknown key for IPFS timeout config entry: " + which);
+            }
+        }
+
+        @Override
+        public String toString() {
+            return this.which;
+        }
+    }
 
     @JsonProperty("groupscan-worker-threads")
     private final int numWorkerThreads;
@@ -36,13 +80,14 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
         @JsonProperty("host") String host,
         @JsonProperty("port") int port,
         @JsonProperty("max-nodes-per-leaf") int maxNodesPerLeaf,
-        @JsonProperty("ipfs-timeout") int ipfsTimeout,
+        @JsonProperty("ipfs-timeouts") Map<IPFSTimeOut, Integer> ipfsTimeouts,
         @JsonProperty("groupscan-worker-threads") int numWorkerThreads,
         @JsonProperty("formats") Map<String, FormatPluginConfig> formats) {
         this.host = host;
         this.port = port;
         this.maxNodesPerLeaf = maxNodesPerLeaf > 0 ? maxNodesPerLeaf : 1;
-        this.ipfsTimeout = ipfsTimeout;
+        ipfsTimeoutDefaults.forEach(ipfsTimeouts::putIfAbsent);
+        this.ipfsTimeouts = ipfsTimeouts;
         this.numWorkerThreads = numWorkerThreads > 0 ? numWorkerThreads : 1;
         this.formats = formats;
     }
@@ -59,8 +104,12 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
         return maxNodesPerLeaf;
     }
 
-    public int getIpfsTimeout() {
-        return ipfsTimeout;
+    public int getIpfsTimeout(IPFSTimeOut which) {
+        return ipfsTimeouts.get(which);
+    }
+
+    public Map<IPFSTimeOut, Integer> getIpfsTimeouts() {
+        return ipfsTimeouts;
     }
 
     public int getNumWorkerThreads() {
@@ -73,7 +122,7 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
 
     @Override
     public int hashCode() {
-        String host_port = String.format("%s:%d[%d,%d]", host, port, maxNodesPerLeaf, ipfsTimeout);
+        String host_port = String.format("%s:%d[%d,%s]", host, port, maxNodesPerLeaf, ipfsTimeouts);
         final int prime = 31;
         int result = 1;
         result = prime * result + ((host_port == null) ? 0 : host_port.hashCode());
@@ -107,7 +156,7 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
         } else if (!host.equals(other.host)
             || port != other.port
             || maxNodesPerLeaf != other.maxNodesPerLeaf
-            || ipfsTimeout != other.ipfsTimeout
+            || ipfsTimeouts != other.ipfsTimeouts
             || numWorkerThreads != other.numWorkerThreads ) {
             return false;
         }

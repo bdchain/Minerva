@@ -5,12 +5,13 @@ import io.ipfs.api.MerkleNode;
 import io.ipfs.multiaddr.MultiAddress;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.UserException;
+import org.apache.drill.exec.store.ipfs.IPFSStoragePluginConfig.IPFSTimeOut;
 import org.bouncycastle.util.Strings;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,44 +33,46 @@ public class IPFSHelper {
   public static final String IPFS_NULL_OBJECT_HASH = "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n";
   public static final Multihash IPFS_NULL_OBJECT = Multihash.fromBase58(IPFS_NULL_OBJECT_HASH);
 
-  private ExecutorService executorService;
+  private WeakReference<ExecutorService> executorService;
+  private static ExecutorService DEFAULT_EXECUTOR = Executors.newSingleThreadExecutor();
   private IPFS client;
-  private Multihash myID;
-  private List<MultiAddress> myAddrs;
   private IPFSPeer myself;
   private int maxPeersPerLeaf;
-  private int timeout;
+  private Map<IPFSTimeOut, Integer> timeouts;
 
-  public IPFSHelper(IPFS ipfs, ExecutorService executorService) {
-    this(ipfs);
-    this.executorService = executorService;
-  }
+  class DefaultWeakReference<T> extends WeakReference<T> {
+    private T default_;
+    public DefaultWeakReference(T referent, T default_) {
+      super(referent);
+      this.default_ = default_;
+    }
 
-  public IPFSHelper(IPFS ipfs) {
-    executorService = Executors.newSingleThreadExecutor();
-    this.client = ipfs;
-    try {
-      Map res = client.id();
-      myID = Multihash.fromBase58((String)res.get("ID"));
-      myAddrs = ((List<String>) res.get("Addresses"))
-          .stream()
-          .map(addr -> new MultiAddress(addr))
-          .collect(Collectors.toList());
-      myself = new IPFSPeer(this, myID);
-    } catch (IOException e) {
-      //TODO handle exception
-      myID = null;
-      myAddrs = Collections.emptyList();
-      myself = null;
+    @Override
+    public T get() {
+      T ret = super.get();
+      if (ret == null) {
+        return default_;
+      } else {
+        return ret;
+      }
     }
   }
 
-  public void setExecutorService(ExecutorService executorService) {
-    this.executorService = executorService;
+  public IPFSHelper(IPFS ipfs) {
+    executorService = new DefaultWeakReference<>(DEFAULT_EXECUTOR, DEFAULT_EXECUTOR);
+    this.client = ipfs;
   }
 
-  public void setTimeout(int timeout) {
-    this.timeout = timeout;
+  public void setExecutorService(ExecutorService executorService) {
+    this.executorService = new DefaultWeakReference<>(executorService, DEFAULT_EXECUTOR);
+  }
+
+  public void setTimeouts(Map<IPFSTimeOut, Integer> timeouts) {
+    this.timeouts = timeouts;
+  }
+
+  public void setMyself(IPFSPeer myself) {
+    this.myself = myself;
   }
 
   public void setMaxPeersPerLeaf(int maxPeersPerLeaf) {
@@ -80,37 +83,23 @@ public class IPFSHelper {
     return client;
   }
 
-  public Multihash getMyID() {
-    return myID;
-  }
-
-  public IPFSPeer getSelf() {
-    return myself;
-  }
-
   public List<Multihash> findprovsTimeout(Multihash id) throws IOException {
     List<String> providers;
-    if (executorService != null) {
-      providers = client.dht.findprovsListTimeout(id, maxPeersPerLeaf, timeout, executorService);
-    } else {
-      throw new NullPointerException("executor is null");
-    }
+    providers = client.dht.findprovsListTimeout(id, maxPeersPerLeaf, timeouts.get(IPFSTimeOut.FIND_PROV), executorService.get());
 
     List<Multihash> ret = providers.stream().map(str -> Multihash.fromBase58(str)).collect(Collectors.toList());
     return ret;
   }
 
   public List<MultiAddress> findpeerTimeout(Multihash peerId) throws IOException {
-    if(peerId.equals(myID)) {
-      return myAddrs;
+    // trying to resolve addresses of a node itself will always hang
+    // so we treat it specially
+    if(peerId.equals(myself.getId())) {
+      return myself.getMultiAddresses();
     }
 
     List<String> addrs;
-    if (executorService != null) {
-      addrs = client.dht.findpeerListTimeout(peerId, timeout, executorService);
-    } else {
-      throw new NullPointerException("executor is null");
-    }
+    addrs = client.dht.findpeerListTimeout(peerId, timeouts.get(IPFSTimeOut.FIND_PEER_INFO), executorService.get());
     List<MultiAddress>
         ret = addrs
         .stream()
@@ -124,9 +113,27 @@ public class IPFSHelper {
     R apply(final T in) throws E;
   }
 
+  @FunctionalInterface
+  public interface ThrowingSupplier<R, E extends Exception> {
+    R get() throws E;
+  }
+
+  /**
+   * Execute a time-critical operation op within time timeout. Throws TimeoutException, so the
+   * caller has a chance to recover from a timeout.
+   * @param op a Function that represents the operation to perform
+   * @param in the parameter for op
+   * @param timeout consider the execution has timed out after this amount of time in seconds
+   * @param <T>
+   * @param <R>
+   * @param <E>
+   * @return R the result of the operation
+   * @throws TimeoutException
+   * @throws E
+   */
   public <T, R, E extends Exception> R timed(ThrowingFunction<T, R, E> op, T in, int timeout) throws TimeoutException, E {
     Callable<R> task = () -> op.apply(in);
-    Future<R> res = executorService.submit(task);
+    Future<R> res = executorService.get().submit(task);
     try {
       return res.get(timeout, TimeUnit.SECONDS);
     } catch (ExecutionException e) {
@@ -136,11 +143,32 @@ public class IPFSHelper {
     }
   }
 
+  /**
+   * Execute a time-critical operation op within time timeout. Causes the query to fail completely
+   * if the operation times out.
+   * @param op a Function that represents the operation to perform
+   * @param in the parameter for op
+   * @param timeout consider the execution has timed out after this amount of time in seconds
+   * @param <T>
+   * @param <R>
+   * @param <E>
+   * @return R the result of the operation
+   * @throws E
+   */
   public <T, R, E extends Exception> R timedFailure(ThrowingFunction<T, R, E> op, T in, int timeout) throws E {
     Callable<R> task = () -> op.apply(in);
-    Future<R> res = executorService.submit(task);
+    return timedFailure(task, timeout, TimeUnit.SECONDS);
+  }
+
+  public <R, E extends Exception> R timedFailure(ThrowingSupplier<R, E> op, int timeout) throws E {
+    Callable<R> task = op::get;
+    return timedFailure(task, timeout, TimeUnit.SECONDS);
+  }
+
+  private <R, E extends Exception> R timedFailure(Callable<R> task, int timeout, TimeUnit timeUnit) throws E {
+    Future<R> res = executorService.get().submit(task);
     try {
-      return res.get(timeout, TimeUnit.SECONDS);
+      return res.get(timeout, timeUnit);
     } catch (ExecutionException e) {
       throw (E) e.getCause();
     } catch (TimeoutException e) {

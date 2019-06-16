@@ -23,6 +23,16 @@ public class IPFSPeer {
     this.id = id;
   }
 
+  IPFSPeer(IPFSHelper helper, Multihash id, List<MultiAddress> addrs) {
+    this.helper = helper;
+    this.id = id;
+    this.addrs = addrs;
+    this.isDrillReady = helper.isDrillReady(id);
+    this.isDrillReadyChecked = true;
+    this.drillbitAddress = IPFSHelper.pickPeerHost(addrs);
+    this.drillbitAddressChecked = true;
+  }
+
   public boolean isDrillReady() {
     if (!isDrillReadyChecked) {
       isDrillReady = helper.isDrillReady(id);
@@ -39,6 +49,11 @@ public class IPFSPeer {
   public Optional<String> getDrillbitAddress() {
     findDrillbitAddress();
     return drillbitAddress;
+  }
+
+  public List<MultiAddress> getMultiAddresses() {
+    findDrillbitAddress();
+    return addrs;
   }
 
   public Multihash getId() {

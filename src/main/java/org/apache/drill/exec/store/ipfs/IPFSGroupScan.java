@@ -6,13 +6,12 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import org.apache.drill.shaded.guava.com.google.common.collect.Maps;
+import org.apache.drill.shaded.guava.com.google.common.cache.LoadingCache;
 import org.apache.drill.shaded.guava.com.google.common.base.Preconditions;
 import org.apache.drill.shaded.guava.com.google.common.collect.ArrayListMultimap;
 import org.apache.drill.shaded.guava.com.google.common.collect.ImmutableList;
 import org.apache.drill.shaded.guava.com.google.common.collect.ListMultimap;
 import org.apache.drill.shaded.guava.com.google.common.collect.Lists;
-import io.ipfs.api.IPFS;
 import io.ipfs.api.MerkleNode;
 import io.ipfs.multihash.Multihash;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
@@ -46,26 +45,22 @@ import java.util.concurrent.RecursiveTask;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.apache.drill.exec.store.ipfs.IPFSStoragePluginConfig.IPFSTimeOut.FETCH_DATA;
+
 @JsonTypeName("ipfs-scan")
 public class IPFSGroupScan extends AbstractGroupScan {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(IPFSGroupScan.class);
   private IPFSContext ipfsContext;
   private IPFSScanSpec ipfsScanSpec;
+  private IPFSStoragePluginConfig config;
   private List<SchemaPath> columns;
 
   private static long DEFAULT_NODE_SIZE = 1000l;
-
-  private static int DEFAULT_MAX_IPFS_NODES = 1;
-  private static int DEFAULT_IPFS_TIMEOUT = 2;
 
   private ListMultimap<Integer, IPFSWork> assignments;
   private List<IPFSWork> ipfsWorkList = Lists.newArrayList();
   private Map<String, List<IPFSWork>> endpointWorksMap;
   private List<EndpointAffinity> affinities;
-
-  private int maxNodesPerLeaf = DEFAULT_MAX_IPFS_NODES;
-  private int ipfsTimeout = DEFAULT_IPFS_TIMEOUT;
-
 
   @JsonCreator
   public IPFSGroupScan(@JsonProperty("IPFSScanSpec") IPFSScanSpec ipfsScanSpec,
@@ -85,23 +80,20 @@ public class IPFSGroupScan extends AbstractGroupScan {
     super((String) null);
     this.ipfsContext = ipfsContext;
     this.ipfsScanSpec = ipfsScanSpec;
-    this.maxNodesPerLeaf = ipfsContext.getStoragePluginConfig().getMaxNodesPerLeaf();
-    this.ipfsTimeout = ipfsContext.getStoragePluginConfig().getIpfsTimeout();
+    this.config = ipfsContext.getStoragePluginConfig();
     logger.debug("GroupScan constructor called with columns {}", columns);
     this.columns = columns == null || columns.size() == 0? ALL_COLUMNS : columns;
     init();
   }
 
   private void init() {
-
-    IPFS ipfs = ipfsContext.getIPFSClient();
-    IPFSHelper ipfsHelper = new IPFSHelper(ipfs);
-    ipfsHelper.setMaxPeersPerLeaf(maxNodesPerLeaf);
-    ipfsHelper.setTimeout(ipfsTimeout);
+    IPFSHelper ipfsHelper = ipfsContext.getIPFSHelper();
+    ipfsHelper.setMaxPeersPerLeaf(config.getMaxNodesPerLeaf());
+    ipfsHelper.setTimeouts(config.getIpfsTimeouts());
     endpointWorksMap = new HashMap<>();
 
     Multihash topHash = ipfsScanSpec.getTargetHash(ipfsHelper);
-    Map<Multihash, IPFSPeer> peerMap = Maps.newConcurrentMap();
+    LoadingCache<Multihash, IPFSPeer> peerMap = ipfsContext.getIPFSPeerCache();
 
     try {
       //TODO detect and warn about loops/recursions in a malformed tree
@@ -119,16 +111,12 @@ public class IPFSGroupScan extends AbstractGroupScan {
         public Map<Multihash, String> compute() {
           try {
             if (isProvider) {
-              if (!peerMap.containsKey(hash)) {
-                IPFSPeer newPeer = new IPFSPeer(ipfsHelper, hash);
-                peerMap.put(hash, newPeer);
-              }
-              IPFSPeer peer = peerMap.get(hash);
+              IPFSPeer peer = peerMap.getUnchecked(hash);
               ret.put(hash, peer.hasDrillbitAddress() ? peer.getDrillbitAddress().get() : null);
               return ret;
             }
 
-            MerkleNode metaOrSimpleNode = ipfsHelper.timedFailure(ipfsHelper.getClient().object::links, hash, ipfsTimeout);
+            MerkleNode metaOrSimpleNode = ipfsHelper.timedFailure(ipfsHelper.getClient().object::links, hash, config.getIpfsTimeout(FETCH_DATA));
             if (metaOrSimpleNode.links.size() > 0) {
               logger.debug("{} is a meta node", hash);
               //TODO do something useful with leaf size, e.g. hint Drill about operation costs
@@ -151,19 +139,16 @@ public class IPFSGroupScan extends AbstractGroupScan {
               logger.debug("{} is a simple node", hash);
               List<IPFSPeer> providers = ipfsHelper.findprovsTimeout(hash).stream()
                   .map(id ->
-                    peerMap.containsKey(id) ?
-                    peerMap.get(id) :
-                    new IPFSPeer(ipfsHelper, id)
+                    peerMap.getUnchecked(id)
                   )
                   .collect(Collectors.toList());
               //FIXME isDrillReady may block threads
-              providers.forEach(p -> peerMap.put(p.getId(), p));
               providers = providers.stream()
                   .filter(IPFSPeer::isDrillReady)
                   .collect(Collectors.toList());
               if (providers.size() < 1) {
                 logger.warn("No drill-ready provider found for leaf {}, adding foreman as the provider", hash);
-                providers.add(ipfsHelper.getSelf());
+                providers.add(ipfsContext.getMyself());
               }
 
               logger.debug("Got {} providers for {} from IPFS", providers.size(), hash);
@@ -213,7 +198,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
 
       Stopwatch watch = Stopwatch.createStarted();
       //FIXME parallelization width magic number, maybe a config entry?
-      ForkJoinPool forkJoinPool = new ForkJoinPool(ipfsContext.getStoragePluginConfig().getNumWorkerThreads());
+      ForkJoinPool forkJoinPool = new ForkJoinPool(config.getNumWorkerThreads());
       ipfsHelper.setExecutorService(Executors.newCachedThreadPool());
       IPFSTreeFlattener topTask = new IPFSTreeFlattener(topHash, false);
       Map<Multihash, String> leafAddrMap = forkJoinPool.invoke(topTask);
@@ -272,6 +257,7 @@ public class IPFSGroupScan extends AbstractGroupScan {
     super(that);
     this.ipfsContext = that.ipfsContext;
     this.ipfsScanSpec = that.ipfsScanSpec;
+    this.config = that.config;
     this.assignments = that.assignments;
     this.ipfsWorkList = that.ipfsWorkList;
     this.endpointWorksMap = that.endpointWorksMap;
