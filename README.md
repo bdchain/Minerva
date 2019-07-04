@@ -14,7 +14,7 @@ TODO
 
 ## 编译
 
-模块可以独立编译，也可以放入Drill源码树中与Drill一起编译。另外，由于依赖修改过的IPFS的API，需要先在本地编译安装java-ipfs-api，否则在编译过程中会出现找不到符号的错误。
+模块可以独立编译，也可以放入Drill源码树中与Drill一起编译。另外，由于依赖修改过的IPFS的API，需要先在本地编译安装[java-ipfs-api](https://github.com/bdchain/java-ipfs-api)，否则在编译过程中会出现找不到符号的错误。
 
 ### 独立编译
 
@@ -26,7 +26,7 @@ TODO
 
 ```
 cd drill/contrib/
-git clone https://git.code.tencent.com/drill-over-ipfs/drill-ipfs-storage.git storage-ipfs
+git clone https://github.com/bdchain/Minerva.git storage-ipfs
 ```
 
 编辑storage plugin模块的Parent POM (contrib/pom.xml)，在`<modules>`下添加这个插件：
