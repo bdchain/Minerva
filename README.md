@@ -1,39 +1,40 @@
 # Drill Storage Plugin for IPFS
 
+[中文](README.zh.md)
 
-## 目录
+## Contents
 
-0. [简介](#简介)
-1. [编译](#编译)
-2. [配置](#配置)
-3. [运行](#运行)
+0. [Introduction](#Introduction)
+1. [Compile](#Compile)
+2. [Install](#Install)
+2. [Configuration](#Configuration)
+3. [Run](#Run)
 
-## 简介
+## Introduction
 
 TODO
 
-## 编译
+## Compile
 
-### 依赖
+### Dependencies
 
-模块依赖下列项目的fork版本：
+This project depends on forks of the following projects:
 
 * IPFS Java API： [java-ipfs-api](https://github.com/bdchain/java-ipfs-api)
 
-* Drill 1.16.0：[Drill-fork](https://github.com/bdchain/Drill-fork) （`1.16.0-fork`分支）
+* Drill 1.16.0：[Drill-fork](https://github.com/bdchain/Drill-fork) （`1.16.0-fork` branch）
 
-请先克隆并在本地编译安装这两个项目，否则在后续编译中会出现找不到符号的错误。
+Please clone and build these projects locally, or the compiler will complain about unknown symbols when you compile this project.
 
-### 在Drill源码树中编译
+### Compile under the Drill source tree
 
-将仓库克隆到Drill代码树的`contrib`目录下，如`contrib/storage-ipfs`：
-
+Clone to the `contrib` directory in Drill source tree, e.g. `contrib/storage-ipfs`:
 ```
 cd drill/contrib/
 git clone https://github.com/bdchain/Minerva.git storage-ipfs
 ```
 
-编辑storage plugin模块的Parent POM (contrib/pom.xml)，在`<modules>`下添加这个插件：
+Edit the parent POM of Drill contrib module (contrib/pom.xml), add this plugin under `<modules>` section:
 
 ```
 <modules>
@@ -44,23 +45,21 @@ git clone https://github.com/bdchain/Minerva.git storage-ipfs
 </modules>
 ```
 
-然后在Drill的代码树根目录下执行Build：
+Build from the root directory of Drill source tree:
 
 ```
 mvn -T 2C clean install -DskipTests　-Dcheckstyle.skip=true
 ```
 
-生成的jar包在storage-ipfs/target目录下
+The jars are in the `storage-ipfs/target` directory.
 
+## Install
 
-## 安装
+The executables and configurations are in `distribution/target/apache-drill-1.16.0`. Copy the entire directory to somewhere outside the source tree, and name it `drill-run` e.g., for testing later.
 
-生成的Drill可执行文件位于`distribution/target/apache-drill-1.16.0`目录下
-将整个目录复制到代码树之外，以便后续运行和测试，例如复制为`drill-run`
+Copy the `drill-ipfs-storage-{version}.jar` generated jar file to `drill-run/jars`.
 
-将生成的`drill-ipfs-storage-{version}.jar`复制到`drill-run/jars`中。
-
-将ipfs的几个依赖包：
+Copy `java-api-ipfs-v1.2.2.jar` which is IPFS's Java API, along with its dependencies provided as jar files:
 
 ```
 cid.jar
@@ -71,25 +70,24 @@ multihash.jar
 hamcrest-core-1.3.jar
 ```
 
-以及IPFS Java API本身编译生成的jar包`java-api-ipfs-v1.2.2.jar` 
-一起复制到`drill-run/jars/3rdparty`目录下。
+to `drill-run/jars/3rdparty`.
 
-插件配置文件`storage-plugin-override.conf`根据需要可以复制到`drill-run/conf`文件夹下，这样插件的配置会在每次Drill启动时自动应用并启用插件，不需要手动配置。
+Optionally, copy the configuration override file `storage-plugin-override.conf` to `drill-run/conf`, if you want Drill to auto configure and enable IPFS storage plugin at every (re)start.
 
-## 配置
+## Configuration
 
-1. 首先设置Drill的hostname为机器的IP地址：
-
-    编辑`conf/drill-env.sh`中的`DRILL_HOST_NAME`，改为机器的IP。
-    若要在私有集群上工作的，改为内网IP，准备在公网上工作的，改为公网IP。
-
-2. 然后配置IPFS storage plugin：
-
-    如果没有使用`storage-plugin-override.conf`文件，需要手动配置并启用插件：
+1. Set Drill hostname to the IP address of the node to run Drill:
     
-    到Drill的webui (<http://localhost:8047>) 的Storage 标签页下注册IPFS storage plugin，页面最下方有 New Storage Pulugin 编辑框，Name 填 `ipfs`，点击Create;
-    然后输入ipfs storage plugin的配置，默认配置在`storage-ipfs/src/resources/bootstrap-storage-plugins.json`
-    复制中间的一段：
+    Edit file `conf/drill-env.sh` and change the environment variable `DRILL_HOST_NAME` to the IP address of the node. Use private or global addresses, depending on whether you plan to run it on a cluster or the open Internet.
+
+2. Configure the IPFS storage plugin:
+    
+    If you are not using the configuration override file, you will have to manually configure and enable the plugin.
+    
+    Run Drill according to [Section Run](#Run) and go to the webui of Drill (can be found at <http://localhost:8047>). Under the Storage tab, create a new storage plugin named `ipfs` and click the Create button.
+    
+    Copy and paste the default configuration of the IPFS storage plugin located at `storage-ipfs/src/resources/bootstrap-storage-plugins.json`:
+    
     ```
     ipfs : {
         "type":"ipfs",
@@ -107,25 +105,25 @@ hamcrest-core-1.3.jar
     }
     ```
     
-    `host`和`port`指定要连接的IPFS daemon的主机和端口，如IPFS没有作特别设置无需修改。
+    where 
     
-    `max-nodes-per-leaf`是控制每个IPFS数据块最多由多少个节点来提供，单位为秒。设置较大的值容易实现并行化，但在查询的内容在IPFS网络中分布
-    较少的情况下容易导致IPFS超时；相反，设置较低的值可能导致并行化程度较低，但不易超时。
+    `host` and `port` are the host and API port where your IPFS daemon will be listening. Change it so that it matches the configuration of your IPFS instance.
+
+    `max-nodes-per-leaf` controls how many provider nodes will be considered when the query is being planned. A larger value increases the parallelization width but typically takes longer to find enough providers from DHT resolution. A smaller value does the opposite.
     
-    `ipfs-timeouts`控制IPFS的超时时间，单位为秒。`find-provider`为查询DHT以查找某一CID的提供者的时间，`find-peer-info`是解析内容提供者的网络地址的时间，`fetch-data`是从提供者处传输内容到本地的时间。
+    `ipfs-timeouts` set the maximum amount of time in seconds for various time consuming operations: `find-provider` is the time allowed to do DHT queries to find providers, `find-peer-info` is the time allowed to resolve the network addresses of the providers and `fetch-data` is the time the actual transmission is allowed to take. 
     
-    在私有集群的环境中，内容在每台节点上均匀分布的情况下，可以将`max-nodes-per-leaf`设置得大一些，`ipfs-timeouts`则可以小一些；公网环境则相反。
+    `groupscan-worker-threads` limits the number of worker threads when the planner communicate with IPFS daemon to resolve providers and peer info.
     
-    `groupscan-worker-threads`是用于解析CID的内容提供者时并行处理的线程数目，合理数量的并行线程可以提高查询准备阶段的速度。
+    `formats` specifies the formats of the files. It is unimplemented for now and does nothing.
     
-    `formats`控制读取和写入内容的格式，目前不生效。
+    Click the Update button after finishing editing. You should see the IPFS storage plugin is registered with Drill and you can enable it with the Enable button.
     
-    编辑完成后，点Update，然后回到Storage主页面就可以看到ipfs插件已经注册到Drill里了。
-    点Enable就可以启用这个插件，在query里用ipfs的前缀可以指定使用ipfs存储引擎。
+3. Configure IPFS
+
+    Start the IPFS daemon first. 
     
-3. 配置IPFS
-    
-    首先启动IPFS daemon。设置IPFS节点的`drill-ready`标志：
+    Set a Drill-ready flag to the node:
     
     ```
     ipfs name publish $(\
@@ -134,44 +132,45 @@ hamcrest-core-1.3.jar
       )\
     )
     ```
-    该标志位指示一台IPFS节点上运行了Drill IPFS storage plugin，可以参与Drill的分布式运行。如不设置该标志位，plugin在调度时会忽视该节点。
     
-## 运行
+    This flag indicates that an IPFS node is also capable of handling Drill quries and the planner will consider it when scheduling a query to execute distributedly. A node without this flag will be ignored.
+    
 
-### 嵌入式模式
+## Run
 
-启动IPFS daemon：
+### Embedded mode
+
+Start IPFS daemon：
 
 ```
 ipfs daemon &>/dev/null &
 ```
 
-启动drill-embedded：
+start drill-embedded：
 
 ```
 drill-run/bin/drill-embedded
 ```
 
-即可在命令行和网页界面执行查询。
+You can now execute queries via the command line as well as the web interface.
 
-### 后台运行
+### As a background service
 
-如果不希望Drill占据一个终端，可以使其在后台运行。
-后台运行需要借助tmux。可以通过包管理器安装。
+You can run drill-embedded as a background process without controlling a terminal. This is done with the help of tmux, which is available in many distributions of Linux.
 
-修改systemd的服务文件`drill-embedded.service`，使其中环境变量`DRILL_HOME`指向Drill安装的路径，如：
+Edit the systemd service file `drill-embedded.service`, so that the environment variable `DRILL_HOME` pointes to where Drill is installed：
 ```
 Environment="DRILL_HOME=/home/drill/apache-drill-1.16.0"
 ```
-然后安装服务文件到systemd的配置目录下，例如`/usr/lib/systemd/system`：
+Copy the service file to systemd's configuration directory, e.g. `/usr/lib/systemd/system`：
 ```
 cp drill-embedded.service /usr/lib/systemd/system
 ```
-重启systemd守护进程使配置生效：
+Reload the systemd daemon：
 ```
 systemd daemon-reload
 ```
-启动服务：
+Start the service:
 ```
 systemd start drill-embedded.service
 ```
