@@ -29,7 +29,7 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
     private final Map<IPFSTimeOut, Integer> ipfsTimeouts;
 
     @JsonIgnore
-    private final Map<IPFSTimeOut, Integer> ipfsTimeoutDefaults = ImmutableMap.of(
+    private static final Map<IPFSTimeOut, Integer> ipfsTimeoutDefaults = ImmutableMap.of(
         IPFSTimeOut.FIND_PROV, 4,
         IPFSTimeOut.FIND_PEER_INFO, 4,
         IPFSTimeOut.FETCH_DATA, 6
@@ -86,7 +86,12 @@ public class IPFSStoragePluginConfig extends StoragePluginConfigBase{
         this.host = host;
         this.port = port;
         this.maxNodesPerLeaf = maxNodesPerLeaf > 0 ? maxNodesPerLeaf : 1;
-        ipfsTimeoutDefaults.forEach(ipfsTimeouts::putIfAbsent);
+        //TODO Jackson failed to deserialize the ipfsTimeouts map causing NPE
+        if (ipfsTimeouts != null) {
+            ipfsTimeoutDefaults.forEach(ipfsTimeouts::putIfAbsent);
+        } else {
+            ipfsTimeouts = ipfsTimeoutDefaults;
+        }
         this.ipfsTimeouts = ipfsTimeouts;
         this.numWorkerThreads = numWorkerThreads > 0 ? numWorkerThreads : 1;
         this.formats = formats;
