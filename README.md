@@ -14,11 +14,15 @@ TODO
 
 ## 编译
 
-模块可以独立编译，也可以放入Drill源码树中与Drill一起编译。另外，由于依赖修改过的IPFS的API，需要先在本地编译安装[java-ipfs-api](https://github.com/bdchain/java-ipfs-api)，否则在编译过程中会出现找不到符号的错误。
+### 依赖
 
-### 独立编译
+模块依赖下列项目的fork版本：
 
-克隆项目，在项目的根目录下运行： `mvn -T 2C clean install -DskipTests -Dcheckstyle.skip=true`
+* IPFS Java API： [java-ipfs-api](https://github.com/bdchain/java-ipfs-api)
+
+* Drill 1.16.0：[Drill-fork](https://github.com/bdchain/Drill-fork) （`1.16.0-fork`分支）
+
+请先克隆并在本地编译安装这两个项目，否则在后续编译中会出现找不到符号的错误。
 
 ### 在Drill源码树中编译
 
@@ -51,14 +55,12 @@ mvn -T 2C clean install -DskipTests　-Dcheckstyle.skip=true
 
 ## 安装
 
-若与Drill一起编译的，生成的Drill可执行文件位于`distribution/target/apache-drill-1.16.0`目录下
+生成的Drill可执行文件位于`distribution/target/apache-drill-1.16.0`目录下
 将整个目录复制到代码树之外，以便后续运行和测试，例如复制为`drill-run`
-
-若独立编译的，从Drill的网站上下载Drill的安装包，解压到`drill-run`里。
 
 将生成的`drill-ipfs-storage-{version}.jar`复制到`drill-run/jars`中。
 
-ipfs的几个依赖包：
+将ipfs的几个依赖包：
 
 ```
 cid.jar
@@ -69,7 +71,7 @@ multihash.jar
 hamcrest-core-1.3.jar
 ```
 
-以及IPFS Java API本身的jar包`java-api-ipfs-v1.2.2.jar` 
+以及IPFS Java API本身编译生成的jar包`java-api-ipfs-v1.2.2.jar` 
 一起复制到`drill-run/jars/3rdparty`目录下。
 
 插件配置文件`storage-plugin-override.conf`根据需要可以复制到`drill-run/conf`文件夹下，这样插件的配置会在每次Drill启动时自动应用并启用插件，不需要手动配置。
