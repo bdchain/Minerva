@@ -12,7 +12,7 @@
 
 ## Introduction
 
-TODO
+Minerva is a storage plugin of Drill that connects IPFS's decentralized storage and Drill's flexible query engine. Any data file stored on IPFS can be easily accessed from Drill's query interface, just like a file stored on a local disk. Moreover, with Drill's capability of distributed execution, other instances who are also running Minerva can help accelerate the execution: the data stays where it was, and the queries go to the most suitable nodes which stores the data locally and from there the operations can be performed most efficiently. 
 
 ## Compile
 
