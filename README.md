@@ -14,6 +14,12 @@
 
 Minerva is a storage plugin of Drill that connects IPFS's decentralized storage and Drill's flexible query engine. Any data file stored on IPFS can be easily accessed from Drill's query interface, just like a file stored on a local disk. Moreover, with Drill's capability of distributed execution, other instances who are also running Minerva can help accelerate the execution: the data stays where it was, and the queries go to the most suitable nodes which stores the data locally and from there the operations can be performed most efficiently. 
 
+Slides that explain our ideas and the technical details of Minerva: <https://www.slideshare.net/BowenDing4/minerva-ipfs-storage-plugin-for-ipfs>
+
+A live demo: <http://www.datahub.pub/> hosted on a private cluster of Minerva.
+
+Note that it's still in early stages of development and the overall stability and performance is not satisfactory. PRs are very much welcome!
+
 ## Compile
 
 ### Dependencies

@@ -13,6 +13,12 @@
 
 Minerva是Drill的存储插件，使得Drill可以轻松访问和查询存储在IPFS上的数据，如同查询一个本地的文件一般。不仅如此，Minerva不是简单地把文件从IPFS下载到本地进行查询，而是利用Drill灵活的分布式执行引擎，将查询分解并分布到其他同样运行着Minerva的节点上。这些节点存储着数据文件，在彼处执行操作将最为高效。
 
+我们准备了一份PPT，详细介绍Minerva的工作原理：<https://www.slideshare.net/BowenDing4/minerva-ipfs-storage-plugin-for-ipfs>
+
+架设在我们的私有集群上的Live Demo：<http://www.datahub.pub/>
+
+该项目仍处于早期开发阶段，整体性能和稳定性不尽如人意。欢迎贡献代码！
+
 ## 编译
 
 ### 依赖
