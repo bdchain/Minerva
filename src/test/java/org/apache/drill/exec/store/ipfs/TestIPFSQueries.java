@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2018-2020 Bowen Ding, Yuedong Xu, Liang Wang
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,15 +17,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.drill.exec.store.ipfs.formats.text.compliant;
 
-class StreamFinishedPseudoException extends RuntimeException {
 
-  public static final StreamFinishedPseudoException INSTANCE = new StreamFinishedPseudoException();
+package org.apache.drill.exec.store.ipfs;
 
-  private StreamFinishedPseudoException() {
-    super("", null, false, true);
+import org.apache.drill.categories.IPFSStorageTest;
+import org.apache.drill.categories.SlowTest;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category({SlowTest.class, IPFSStorageTest.class})
+public class TestIPFSQueries extends IPFSTestBase {
+
+  @Test
+  public void testNullQuery() throws Exception {
+    testBuilder()
+        .sqlQuery(String.format("SELECT * FROM ipfs.`/ipfs/QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n#json`"))
+        .unOrdered()
+        .expectsNumRecords(0)
+        .go();
   }
-
 }
